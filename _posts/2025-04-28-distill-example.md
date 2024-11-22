@@ -122,6 +122,25 @@ Evidently, letting most of the hardware idle is not ideal; However, there is a f
 ### ZeroBubble
 ### Dapple
 ### PipeMare
+In one sentence, Pipemare conserves memory usage by approximating weights that appeared earlier in the pipeline, instead of caching them; then to ensure convergence, it also schedules learning rate accordingly. It strikes a perfect balance between GPipe and PipeDream. 
+
+PipeDream uses the 1F1B mechanism to maintain a low bubble ratio, but since it computes the gradient by using the same weight in forward and backward passes, it has to store a lot of extra weight. 
+
+PipeMare, on the other hand, simply uses whatever weight $W$ in the memory to compute the gradient, and does not use the cached historical weights. 
+
+Sounds intuitive, but what could go wrong?
+
+Note that at the $k$th fully connected NN layer, the computed gradient $g_k$ from backpropagation steps depends on two things: (1) the current weight stored in device $d_k$ , and (2) the loss at the model output layer, which depends on the forward pass at $k$th layer, processed by the same device $d_k$ at an earlier time, using an earlier version of model weights. In essence, it computes the gradient using two different versions of model weights! 
+
+$$w^+ = w - \nabla f(w_{older}, w_{newer})$$
+
+In comparison, gradient descent is only defined using a fixed version of function input (ie. model weights), as below:
+
+$$w^+ = w - \nabla f(w')$$
+
+where for GPipe, $w' = w$, and for PipeDream, $w'$ stands for a single version of gradient that is somewhat earlier than $w$. 
+
+[TODO mention GPipe's lr schedule, as well as discrepancy approx]
 
 ## Comparisons and Trade-offs
 
