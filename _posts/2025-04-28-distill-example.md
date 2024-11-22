@@ -114,11 +114,48 @@ Evidently, letting most of the hardware idle is not ideal; However, there is a f
 ### Techniques and Trade-Offs, a high-level overview
 
 
-
 ## Wide-Known Approaches to Pipeline Parallelism
 
-### GPipe
-### PipeDream
+[TO-DO]
+(note to incorporate above:)
+characteristics of pipeline parallelism approaches 
+- synchronous vs asynchronous 
+- data units used (mini-batch vs micro-batch)
+-  
+
+performance metrics:
+- bubble sizes
+- memory required
+
+pipeline parallelism is reflective of other ml trends, creating different pipelines for different approaches(?) 
+
+questions we should answer: 
+- Why would you choose one approach vs another? 
+- Is there any reason one approach could be better for a learning task vs another?
+- Is the convergence column of survey paper correct *in practice*? 
+
+### PipeDream: An Asynchronous Approach 
+
+PipeDream first introduced the term "pipeline parallelism" in a paper released in 2018. PipeDream systematically partitions DNN layers to keep all GPUs productive and minimize communication. It introduced the idea of pipelining minibatches in addition to partitioning layers of the model. 
+
+Pipedream is representative of the group of **asynchronous** approaches to pipeline parallelism, meaning that it occasionally must compute gradients of a mini-batch with "stale" weights, which can reduce learning efficiency (i.e., not every update has the same amount of information that it would in traditional model training)
+
+- Pipedream **communicates** only the output data of a set of model layers (partitioned according to number of GPUs)
+- Pipedream uses **asynchronous** computations of gradients
+    - This technically reduces statistical efficiency since gradients can be computed on stale weights.
+- Pipedream continuously calculates the number of optimal minibatches at runtime.
+- Pipedream stores one version of weights per mini-batch
+
+
+### GPipe: A Synchronous Approach 
+
+- GPipe **communicates** only the output data of one model partition (possibly larger or smaller than a layer)
+- GPipe synchronizes gradients across micro-batches within a mini-batch
+    - This leads to more idle time, or bubbles, for the system of GPUs.  
+- The user specifies the number of micro-batches and the number of model partitions (equal to the number of available GPUs)
+- GPipe stores one version of weights total
+
+
 ### ZeroBubble
 ### Dapple
 ### PipeMare
