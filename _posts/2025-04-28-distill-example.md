@@ -69,6 +69,70 @@ _styles: >
 
 Note: please use the table of contents as defined in the front matter rather than the traditional markdown styling.
 
+## Introduction to Pipeline Parallelism
+
+### Parallel Model Training: Model vs Data Parallelism
+
+[TODO]
+
+
+<!-- ### What is Pipeline Parallelism? -->
+
+### Naive Model Parallelism, and a Problem
+Consider the process of training a model consisting of $p$ fully connected layers: there is a sequence of forward steps $f_1, ..., f_p$, followed by a sequence of back-propagation steps $b_p, b_{p-1}, ..., b_1$. If the size of the model is too big, it may be necessary to spread the training task among several devices. In particular, since each pair of forward and backward passes may use the same data, like the weight $W$ of the fully-connected neural network layer, a natural choice is to designate a single "device" to handle both forward and backward passes of the same stage. 
+
+Naively, given computational devices $d_1, ..., d_p$, one might accomplish such a task in the following manner:
+```
+1. Use d_1 to compute x_1 = sigma(W_1 @ x_0)
+2. Use d_2 to compute x_2 = sigma(W_2 @ x_1 )
+.
+.
+.
+p. Use d_p to compute y = sigma(W_p @ x_{p-1});
+   Obtain gradient from loss function associated with y.
+p+1. Use d_p to compute gradient L_p using gradient of loss and W_p,
+     then update W_p.
+p+2. Use d_{p-1} to compute gradient L_{p-1} using L_p and W_{p-1}, 
+     then update W_{p-1}.
+.
+.
+.
+2p. Use d_1 to compute gradient L_1, and update W_1
+```
+If we were to create a plot representing what each of the devices are doing at any time, it would look like the following: 
+
+[TODO insert plot]
+
+Notice how each device (ie. GPU) is idle for most of the time? If we were to consider a very simplistic case where each task, whether it is forward or backward computation, takes exactly 1 second to complete, then each device is only working for $2$ out of the $2p$ seconds, meaning a lot of hardware is sitting around, doing nothing. This idling is indicated by the white spaces in the plot, and they are known as "Bubbles". In ML System literature, the term "Bubble Ratio" is used to describe the ratio of such hardware idle time. 
+
+Evidently, letting most of the hardware idle is not ideal; However, there is a family of techniques that allows training model in a parallel manner, while reducing the ratio of such idle bubbles. We generally refer to such techniques as...
+
+## Pipeline Parallelism!
+
+### Overall Idea
+
+### Techniques and Trade-Offs, a high-level overview
+
+
+
+## Wide-Known Approaches to Pipeline Parallelism
+
+### GPipe
+### PipeDream
+### ZeroBubble
+### Dapple
+### PipeMare
+
+## Comparisons and Trade-offs
+
+## Modeling and Optimization
+
+### Problem Formulation
+
+### Proposed Solution: General Purpose Solvers
+
+
+
 ## Equations
 
 This theme supports rendering beautiful math in inline and display modes using [MathJax 3](https://www.mathjax.org/) engine.
