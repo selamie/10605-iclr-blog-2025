@@ -177,6 +177,22 @@ $$w^+ = w - \nabla f(w')$$
 
 where for GPipe, $w' = w$, and for PipeDream, $w'$ stands for a single version of gradient that is somewhat earlier than $w$. 
 
+Note the trade off between GPipe and Pipedream: if we wish to update weights $w$ using only freshly computed weights, the device will sequentially wait for a certain weight $w_t$ at timestep $t$ to (1) go throught forward pass; and then (2) go through back propagation path and produce an associated gradient, before computing the final update, which requires a long wait. 
+
+PipeDream, on the other hand, updates weight $w$ using some version of weight $w_t$, and while waiting for $w_t$ to make its way all the way across forward and backward pass to produce $\nabla f_t$, the device can spend the time processing other weights. The problem is, while $w_t$ makes its round trip throught forward-backward prop, all newer weight copies $w_{t+1}, w_{t+2}$... shall be stored to the device, before $w_t$ finally completes the round trip, be used to update the model weights, and gets removed, which is memory intensive. 
+
+Now, Pipemare simultaneously resolved GPipe and PipeMare's issue to some extend. Since it doesn't wait for any weights, the idling bubble is small; since it doesn't store older weights, it is memory efficient. 
+
+However, this brings two additional issues: 
+
+1. If $w^+ = w - \nabla f(w_{older}, w_{newer})$ then how do we know $w_{older}$ without caching it?  
+2. Since we are performing gradient descent using inconsistent versions of weights, would convergence be an issue: 
+
+PipeMare resolves these two problems separately: 
+
+1. TODO
+2. TODO
+
 [TODO mention GPipe's lr schedule, as well as discrepancy approx]
 
 ## Comparisons and Trade-offs
