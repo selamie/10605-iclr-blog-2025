@@ -70,10 +70,32 @@ _styles: >
 Note: please use the table of contents as defined in the front matter rather than the traditional markdown styling.
 
 ## Introduction to Pipeline Parallelism
+<!--rename to simply Introduction -->
+
+<!-- (intro/interest catcher: a high level analogy to assist explanation?)  -->
+
+In modern machine learning, large deep neural networks with billions of parameters are run on distributed systems, with a single model being trained on many different machines. This presents a problem for model developers, who have to design machine learning systems for distributed training. 
+
+Training modern large-scale models requires effective techniques for partitioning and parallelizing computation. This problem ultimately results in three key traits to optimize for: 
+  - **how long** the model will take to train
+  - **how much memory** it will require, and 
+  - how **efficiently** the available accelerators (i.e. GPUs) will be used. 
+
+The efficiency of accelerator usage is related both to how long the model takes to train and how many resources may be required for a given model size. 
+
+Multiple types of parallelization techniques have emerged as model sizes and distributed training architectures have grown. 
 
 ### Parallel Model Training: Model vs Data Parallelism
 
-[TODO]
+**Data parallelism** helps to parallelize computation by creating copies of the model on each accelerator, then partitioning the data and distributing it to the different devices. The results must be aggregated for the backwards propogation step. This can help to distribute a small enough model over multiple GPUs, but cannot address the case when the model itself is too large to fit on a single GPU. 
+
+<!-- [add detail, pros/cons][explain how data parallelism speeds up training] -->
+
+In **model parallelism**, the model itself is divided into multiple partitions of the original model, then allocated to different devices. Typically, this is done "vertically" (see fig.), more formally known as inter-layer model parallelism, where different layers of the model are partitioned to different GPUs, and only the resulting activation values and gradients need to be transmitted between GPUs. 
+
+<!-- [insert fig] -->
+
+<!-- [add detail][explanation of intra-layer parallelism?] -->
 
 
 <!-- ### What is Pipeline Parallelism? -->
@@ -109,12 +131,27 @@ Evidently, letting most of the hardware idle is not ideal; However, there is a f
 
 ## Pipeline Parallelism!
 
-### Overall Idea
+Though the definition of pipeline parallelism technically includes the naive inter-layer model parallelism approach, in general, its goal is to improve on this baseline by finding ways to more efficiently utilize the underlying devices, including by incorporating **data parallelism** techniques and reducing GPU idle time. Pipeline parallelism must balance the tradeoffs of **storage, computation, and communication** between the devices in the system. It is unrealistic to absolutely minimize all three of these--typically, a given pipeline parallelism approach will try to find the best tradeoff between them. 
 
-### Techniques and Trade-Offs, a high-level overview
+<!-- ### Overall Idea -->
 
+<!-- ### Techniques and Trade-Offs, a high-level overview -->
+
+In general, pipeline parallelism can be divided into **synchronous** and **asynchronous** scheduling approaches. 
+
+In this case, **synchronous** refers to the fact that all model parameters are synchronously updated  with the accumulated gradients at a given stage. This is the most statistically efficient approach as each update uses all learned information. 
+
+<!-- explain mini/micro batching  -->
+
+**Asynchronous** approaches, however, do not wait to update with all accumulated gradients, allowing higher GPU utilization. But this also means that later mini-batches in the pipeline may derive gradients with stale weights, harming statistical efficiency. 
+
+Given the tradeoffs between the two schedules, any particular implementation of each uses different techniques to try to improve the bubble ratio in the synchronous case, and the learning efficiency in the asynchronous case. Each attempt to mitigate these traits can come with memory and communication trade-offs in exchange for more efficient compute utilization or statistical efficiency. 
+
+<!-- explain synchronous bubble overhead?  -->
 
 ## Wide-Known Approaches to Pipeline Parallelism
+
+Now, we'll look at several different pipeline parallelism approaches and how they choose to mitigate  different tradeoffs. As a reminder, in general, we'd like to acheive minimal memory consumption, efficient compute utilization, and reduce communication overhead. For synchronous approaches we would like to reduce the bubble ratio, and for asynchronous approaches we want maximum statistical efficiency. 
 
 [TO-DO]
 (note to incorporate above:)
@@ -156,7 +193,6 @@ Pipedream is representative of the group of **asynchronous** approaches to pipel
 - GPipe stores one version of weights total
 
 
-### ZeroBubble
 ### Dapple
 ### PipeMare
 In one sentence, Pipemare conserves memory usage by approximating weights that appeared earlier in the pipeline, instead of caching them; then to ensure convergence, it also schedules learning rate accordingly. It strikes a perfect balance between GPipe and PipeDream. 
@@ -195,7 +231,11 @@ PipeMare resolves these two problems separately:
 
 [TODO mention GPipe's lr schedule, as well as discrepancy approx]
 
+### ZeroBubble
+
 ## Comparisons and Trade-offs
+
+[insert charts]
 
 ## Modeling and Optimization
 
