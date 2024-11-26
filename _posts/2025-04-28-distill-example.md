@@ -92,7 +92,7 @@ The horizontal approach, "tensor parallelism" or intra-layer parallelism, splits
 
 Tensor parallelism generally has higher communication overhead than pipeline parallelism because all the results of these partial tensor computations must be transmitted, and inefficient AllReduce operations performed more frequently. However, [it can potentially be more memory efficient and reduce GPU idle time](https://www.determined.ai/blog/tp). 
 
-Of course, it is possible to use the idea of sharding data from data parallelism in addition to partitioning the model, and recent approaches use many specific techniques to try to improve overall efficiency. Though it is unrealistic to absolutely minimize all three of **storage, computation, and communication** costs, a given approach will try to find the best tradeoff between them by attacking each of these issues with a specific technique. 
+Of course, it is possible to use the idea of sharding data from data parallelism in addition to partitioning the model, known as **hybrid parallelism**. Recent approaches use many specific techniques to try to improve overall efficiency. Though it is unrealistic to absolutely minimize all three of **storage, computation, and communication** costs, a given approach will try to find the best tradeoff between them by attacking each of these issues with a specific technique. 
 
 ### Naive Model Parallelism, and a Problem
 Consider the process of training a model consisting of $p$ fully connected layers: there is a sequence of forward steps $f_1, ..., f_p$, followed by a sequence of back-propagation steps $b_p, b_{p-1}, ..., b_1$. If the size of the model is too big, it may be necessary to spread the training task among several devices. In particular, since each pair of forward and backward passes may use the same data, like the weight $W$ of the fully-connected neural network layer, a natural choice is to designate a single "device" to handle both forward and backward passes of the same stage. 
@@ -143,7 +143,7 @@ Now, we'll look at several different pipeline parallelism approaches and how the
   - maximum statistical efficiency
     - For asynchronous approahces, we have to handle weight staleness and inconsistency
 
-Finally, we'd also ideally like an **even workload distributed across our GPUs**, or **load balance**, since one GPU working very hard and another not working that hard is not much better than one active GPU and one idle GPU. 
+Finally, we also want an **even workload distributed across our GPUs**, or **load balance**, since one GPU working very hard and another not working that hard is not much better than one active GPU and one idle GPU. 
 
 <!-- [TO-DO]
 (note to incorporate above:)
@@ -163,7 +163,7 @@ questions we should answer:
 - Is there any reason one approach could be better for a learning task vs another?
 - Is the convergence column of survey paper correct *in practice*?  -->
 
-### GPipe: The Baseline Synchronous Approach
+### GPipe: The Representative Synchronous Approach
 
 One simple way to somewhat improve on this naive baseline is to **segment mini-batches of data** so that at least, during each forward and backward pass, each device can be working on a different segment of the mini-batch--or a **"micro-batch"**. This is how GPipe tries to improve on the naive baseline, and it's representative of most practical synchronous approaches.  
 
@@ -175,7 +175,7 @@ One simple way to somewhat improve on this naive baseline is to **segment mini-b
 - The user specifies the number of micro-batches and the number of model partitions (equal to the number of available GPUs)
 - GPipe stores one version of weights total
 
-### PipeDream: The Baseline Asynchronous Approach
+### PipeDream: The Representative Asynchronous Approach
 
 <!-- PipeDream first introduced the term "pipeline parallelism" in a paper released in 2018. PipeDream systematically partitions DNN layers to keep all GPUs productive and minimize communication. It introduced the idea of pipelining minibatches in addition to partitioning layers of the model.  -->
 
@@ -226,12 +226,19 @@ PipeMare resolves these two problems separately:
 
 ### Zero-Bubble: An Improved Synchronous Approach
 
+
+
 ## Comparisons and Trade-offs
 
-Finally, how do these approaches compare in their 
+Finally, how do these approaches compare in their memory use, computate utilization, and learning convergence? 
 
 {% include figure.html path="assets/img/comp_table_placeholder.png" class="img-fluid" %}
 
+(will construct our own version of this table)
+
+A survey of these approaches (cite) showed... (add explanation)
+
+<!-- Compute extra memory, compute, and comms -->
 
 
 <!-- ## Modeling and Optimization
