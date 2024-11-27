@@ -1,10 +1,8 @@
 ---
 layout: distill
-title: Sample Blog Post
-description: Your blog post's abstract.
-  Please add your abstract or summary here and not in the main body of your text. 
-  Do not include math/latex or hyperlinks.
-date: 2025-04-28
+title: The Frontier of Pipeline Parallelism
+description: Comparing approaches to resolving the pareto frontier in distributed deep learning
+date: 2025-11-29
 future: true
 htmlwidgets: true
 hidden: false
@@ -14,18 +12,14 @@ hidden: false
 #   - name: Anonymous
 
 authors:
-  - name: Albert Einstein
-    url: "https://en.wikipedia.org/wiki/Albert_Einstein"
+  - name: Selam Gano
+    url: ""
     affiliations:
-      name: IAS, Princeton
-  - name: Boris Podolsky
-    url: "https://en.wikipedia.org/wiki/Boris_Podolsky"
+      name: CMU
+  - name: Owen Li
+    url: ""
     affiliations:
-      name: IAS, Princeton
-  - name: Nathan Rosen
-    url: "https://en.wikipedia.org/wiki/Nathan_Rosen"
-    affiliations:
-      name: IAS, Princeton
+      name: CMU
 
 # must be the exact same name as your blogpost
 bibliography: 2025-04-28-distill-example.bib  
@@ -34,49 +28,71 @@ bibliography: 2025-04-28-distill-example.bib
 #   - make sure that TOC names match the actual section names
 #     for hyperlinks within the post to work correctly. 
 #   - please use this format rather than manually creating a markdown table of contents.
-toc:
-  - name: Equations
-  - name: Images and Figures
-    subsections:
-    - name: Interactive Figures
-  - name: Citations
-  - name: Footnotes
-  - name: Code Blocks
-  - name: Diagrams
-  - name: Tweets
-  - name: Layouts
-  - name: Other Typography?
+
+# toc:
+#   - name: Equations
+#   - name: Images and Figures
+#     subsections:
+#     - name: Interactive Figures
+#   - name: Citations
+#   - name: Footnotes
+#   - name: Code Blocks
+#   - name: Diagrams
+#   - name: Tweets
+#   - name: Layouts
+#   - name: Other Typography?
 
 # Below is an example of injecting additional post-specific styles.
 # This is used in the 'Layouts' section of this post.
 # If you use this post as a template, delete this _styles block.
-_styles: >
-  .fake-img {
-    background: #bbb;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    box-shadow: 0 0px 4px rgba(0, 0, 0, 0.1);
-    margin-bottom: 12px;
-  }
-  .fake-img p {
-    font-family: monospace;
-    color: white;
-    text-align: left;
-    margin: 12px 0;
-    text-align: center;
-    font-size: 16px;
-  }
+
+# _styles: >
+#   .fake-img {
+#     background: #bbb;
+#     border: 1px solid rgba(0, 0, 0, 0.1);
+#     box-shadow: 0 0px 4px rgba(0, 0, 0, 0.1);
+#     margin-bottom: 12px;
+#   }
+#   .fake-img p {
+#     font-family: monospace;
+#     color: white;
+#     text-align: left;
+#     margin: 12px 0;
+#     text-align: center;
+#     font-size: 16px;
+#   }
 ---
 
-Note: please use the table of contents as defined in the front matter rather than the traditional markdown styling.
+## Motivation: Deep Learning and Distributed Systems 
 
-## Introduction to Pipeline Parallelism
+In modern machine learning, large deep neural networks with billions of parameters are run on distributed systems, with a single model being trained on many different machines. This presents a problem for model developers, who have to design machine learning systems for distributed training. 
 
-### Parallel Model Training: Model vs Data Parallelism
+Training modern large-scale models requires effective techniques for partitioning and parallelizing computation. This problem ultimately results in three key traits to optimize for: 
+  - **how long** the model will take to train
+  - **how much memory** it will require, and 
+  - how **efficiently** the available accelerators (i.e. GPUs) will be used. 
 
-[TODO]
+The efficiency of accelerator usage is related both to how long the model takes to train and how many resources may be required for a given model size. 
 
+Multiple types of parallelization techniques have emerged as model sizes and distributed training architectures have grown. 
 
-<!-- ### What is Pipeline Parallelism? -->
+## Parallel Model Training: Data vs Model Parallelism
+
+**Data parallelism** helps to parallelize computation by creating copies of the model on each accelerator, then partitioning, or "sharding", the data and distributing it to the different devices. The results must be aggregated for the backwards propogation step. This can help to distribute a small enough model over multiple GPUs, but cannot address the case when the model itself is too large to fit on a single GPU. 
+
+<!-- note: in multiple papers (survey paper, zero bubble paper) data parallelism is described this way,
+ so I continued using this definition -->
+
+In **model parallelism**, the model itself is divided into multiple partitions of the original model, then allocated to different devices. There are two ways to partition a model--"horizontally" and "vertically". 
+
+{% include figure.html path="assets/img/parallelism_strategies_overview.svg" class="img-fluid" %}
+<!-- cite image: https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/scaling/JAX/tensor_parallel_simple.html -->
+
+The horizontal approach, "tensor parallelism" or intra-layer parallelism, splits each tensor in the model into different chunks, and during processing results are synchronized at each step. The vertical approach, **"pipeline parallelism"** or inter-layer parallelism, segments the model into stages, like a pipeline, and only the resulting activation values and gradients need to be transmitted between GPUs. 
+
+Tensor parallelism generally has higher communication overhead than pipeline parallelism because all the results of these partial tensor computations must be transmitted, and inefficient AllReduce operations performed more frequently. However, [it can potentially be more memory efficient and reduce GPU idle time](https://www.determined.ai/blog/tp). 
+
+Of course, it is possible to use the idea of sharding data from data parallelism in addition to partitioning the model, known as **hybrid parallelism**. Recent approaches use many specific techniques to try to improve overall efficiency. Though it is unrealistic to absolutely minimize all three of **storage, computation, and communication** costs, a given approach will try to find the best tradeoff between them by attacking each of these issues with a specific technique. 
 
 ### Naive Model Parallelism, and a Problem
 Consider the process of training a model consisting of $p$ fully connected layers: there is a sequence of forward steps $f_1, ..., f_p$, followed by a sequence of back-propagation steps $b_p, b_{p-1}, ..., b_1$. If the size of the model is too big, it may be necessary to spread the training task among several devices. In particular, since each pair of forward and backward passes may use the same data, like the weight $W$ of the fully-connected neural network layer, a natural choice is to designate a single "device" to handle both forward and backward passes of the same stage. 
@@ -101,26 +117,76 @@ p+2. Use d_{p-1} to compute gradient L_{p-1} using L_p and W_{p-1},
 ```
 If we were to create a plot representing what each of the devices are doing at any time, it would look like the following: 
 
-[TODO insert plot]
+{% include figure.html path="assets/img/naive_placeholder.png" class="img-fluid" %}
 
 Notice how each device (ie. GPU) is idle for most of the time? If we were to consider a very simplistic case where each task, whether it is forward or backward computation, takes exactly 1 second to complete, then each device is only working for $2$ out of the $2p$ seconds, meaning a lot of hardware is sitting around, doing nothing. This idling is indicated by the white spaces in the plot, and they are known as "Bubbles". In ML System literature, the term "Bubble Ratio" is used to describe the ratio of such hardware idle time. 
 
 Evidently, letting most of the hardware idle is not ideal; However, there is a family of techniques that allows training model in a parallel manner, while reducing the ratio of such idle bubbles. We generally refer to such techniques as...
 
-## Pipeline Parallelism!
+### Pipeline Scheduling
 
-### Overall Idea
+In general, pipeline parallelism can be divided into **synchronous** and **asynchronous** scheduling approaches. The naive approach described is a **synchronous** approach, referring to the fact that, periodically, all model parameters are synchronously updated with the accumulated gradients at a given stage. This is the most **statistically efficient** approach as each update uses all learned information. 
 
-### Techniques and Trade-Offs, a high-level overview
+**Asynchronous** approaches do not wait to update with all accumulated gradients, allowing higher GPU utilization. But this also means that later mini-batches in the pipeline may derive gradients with stale weights, harming statistical efficiency. 
 
+Given the tradeoffs between the two schedules, any particular implementation of each uses different techniques to try to improve the bubble ratio in the synchronous case, and the learning efficiency in the asynchronous case. Each attempt to mitigate these traits can come with memory and communication trade-offs in exchange for more efficient compute utilization or statistical efficiency. 
 
+If synchronous scheduling is the most statistically efficient, why would you ever use an asynchronous schedule? Well, if the learning task were some ideal, parabolic convex optimization case, then it's possible there'd be no point to using any approach that harms the numerical progression down to some global minimum. But real machine learning problems are typically messier than this, and in most cases, rather than targeting an ideal convergence, we simply measure the model's actual performance on a problem. Essentially, **it may be advantageous to get to a less-than-ideal convergence faster with our available compute resources**, especially if "faster" is the difference between practically possible or not. 
 
-## Wide-Known Approaches to Pipeline Parallelism
+## Practical Approaches to Pipeline Parallelism
 
-### GPipe
-### PipeDream
-### ZeroBubble
-### Dapple
+Now, we'll look at several different pipeline parallelism approaches and how they choose to mitigate  different tradeoffs. As a reminder, in the ideal case, we'd like to acheive: 
+  - minimal memory consumption 
+  - low communication overhead
+  - efficient compute utilization
+    - For synchronous approaches, we would like to reduce the bubble ratio
+  - maximum statistical efficiency
+    - For asynchronous approahces, we have to handle weight staleness and inconsistency
+
+Finally, we also want an **even workload distributed across our GPUs**, or **load balance**, since one GPU working very hard and another not working that hard is not much better than one active GPU and one idle GPU. 
+
+<!-- [TO-DO]
+(note to incorporate above:)
+characteristics of pipeline parallelism approaches 
+- synchronous vs asynchronous 
+- data units used (mini-batch vs micro-batch)
+-  
+
+performance metrics:
+- bubble sizes
+- memory required
+
+pipeline parallelism is reflective of other ml trends, creating different pipelines for different approaches(?) 
+
+questions we should answer: 
+- Why would you choose one approach vs another? 
+- Is there any reason one approach could be better for a learning task vs another?
+- Is the convergence column of survey paper correct *in practice*?  -->
+
+### GPipe: The Representative Synchronous Approach
+
+One simple way to somewhat improve on this naive baseline is to **segment mini-batches of data** so that at least, during each forward and backward pass, each device can be working on a different segment of the mini-batch--or a **"micro-batch"**. This is how GPipe tries to improve on the naive baseline, and it's representative of most practical synchronous approaches.  
+
+<!-- insert fig -->
+
+- GPipe **communicates** only the output data of one model partition (possibly larger or smaller than a layer)
+- GPipe synchronizes gradients across micro-batches within a mini-batch
+    - This leads to more idle time, or bubbles, for the system of GPUs.  
+- The user specifies the number of micro-batches and the number of model partitions (equal to the number of available GPUs)
+- GPipe stores one version of weights total
+
+### PipeDream: The Representative Asynchronous Approach
+
+<!-- PipeDream first introduced the term "pipeline parallelism" in a paper released in 2018. PipeDream systematically partitions DNN layers to keep all GPUs productive and minimize communication. It introduced the idea of pipelining minibatches in addition to partitioning layers of the model.  -->
+
+Pipedream is representative of the group of **asynchronous** approaches to pipeline parallelism, meaning that it occasionally must compute gradients of a mini-batch with "stale" weights, which can reduce learning efficiency (i.e., not every update has the same amount of information that it would in traditional model training)
+
+- Pipedream **communicates** only the output data of a set of model layers (partitioned according to number of GPUs)
+- Pipedream uses **asynchronous** computations of gradients
+    - This technically reduces statistical efficiency since gradients can be computed on stale weights.
+- Pipedream continuously calculates the number of optimal minibatches at runtime.
+- Pipedream stores one version of weights per mini-batch
+
 ### PipeMare
 In one sentence, Pipemare conserves memory usage by approximating weights that appeared earlier in the pipeline, instead of caching them; then to ensure convergence, it also schedules learning rate accordingly. It strikes a perfect balance between GPipe and PipeDream. 
 
@@ -158,16 +224,33 @@ PipeMare resolves these two problems separately:
 
 [TODO mention GPipe's lr schedule, as well as discrepancy approx]
 
+### Zero-Bubble: An Improved Synchronous Approach
+
+
+
 ## Comparisons and Trade-offs
 
-## Modeling and Optimization
+Finally, how do these approaches compare in their memory use, computate utilization, and learning convergence? 
+
+{% include figure.html path="assets/img/comp_table_placeholder.png" class="img-fluid" %}
+
+(will construct our own version of this table)
+
+A survey of these approaches (cite) showed... (add explanation)
+
+<!-- Compute extra memory, compute, and comms -->
+
+
+<!-- ## Modeling and Optimization
 
 ### Problem Formulation
 
 ### Proposed Solution: General Purpose Solvers
+ -->
 
 
-
+---
+## TEMPLATE: 
 ## Equations
 
 This theme supports rendering beautiful math in inline and display modes using [MathJax 3](https://www.mathjax.org/) engine.
