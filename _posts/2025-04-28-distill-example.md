@@ -214,15 +214,23 @@ Now, Pipemare simultaneously resolved GPipe and PipeMare's issue to some extend.
 
 However, this brings two additional issues: 
 
-1. If $w^+ = w - \nabla f(w_{older}, w_{newer})$ then how do we know $w_{older}$ without caching it?  
-2. Since we are performing gradient descent using inconsistent versions of weights, would convergence be an issue: 
+1. Since we are performing gradient descent using inconsistent versions of weights, would convergence be an issue: 
+2. If $w^+ = w - \nabla f(w_{older}, w_{newer})$ then how do we know $w_{older}$ without caching it?  
 
 PipeMare resolves these two problems separately: 
 
-1. TODO
-2. TODO
+For 1, we locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then the gradient update can be seen as 
+$$w_{i+1} = w_i - \alpha \nabla f(...) = w_t - \alpha \lambda w_{t-\text{delay}} + \alpha \eta$$ 
+where $\alpha$ is the learning rate, ``delay'' is how long a particular version of gradient have delayed, and $\eta$ is the estimation of noise caused by asynchronous gradients. Then if we treat the collection of all versions of gradient over time as a single vector 
+$$W_t = [w_t, w_{t-1}, ...]^\top$$
+then the gradient update rule can be written as some linear equation: 
+$$W_{t+1} = CW_t + \alpha \eta e_1$$
+where $C$ is some suitable matrix, and $e_1$ is one-hot vector with first entry being 1. Convergence of gradient descent would hence depend on $C$'s eigenvalues, or equivalently, the roots of the characteristic polynomial 
+$p(x) = x^{\text{delay}+1} - x^{\text{delay}} + \alpha \lambda$, to lie in the unit circle; solve for an appropriate $\alpha$ gives us a learning rate that lead to convergence. Specifically, [CITE] shows that longer delays require smaller step sizes to ensure convergence. 
 
-[TODO mention GPipe's lr schedule, as well as discrepancy approx]
+For 2, we once again locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then we can can approximate the gradient update equation as 
+$$w^+ = w - \nabla f(w_{older}, w_{newer}) \approx w - \lambda w_{newer} - \Delta (w_{newer} - w_{older}) + \eta $$
+where $\eta$ denotes a noise term and $\Delta$ is the sensitivity of $\nabla f$ to the discrepancy [todo] [define] of gradient. Now we mimic the strategy shown earlier, express the gradient update equation as a linear equation, and solve for appropriate parameters to make its eigenvalues stay in the unit ball. 
 
 ### Zero-Bubble: An Improved Synchronous Approach
 
@@ -230,13 +238,34 @@ PipeMare resolves these two problems separately:
 
 ## Comparisons and Trade-offs
 
-Finally, how do these approaches compare in their memory use, computate utilization, and learning convergence? 
+Due to limited space, the previous section only discussed a few of these approaches in detail. However, if we broadly examine pipeline parallelism methods and their performance metrics in e.g. memory usage, computation resource utilization, and convergence, we see some interesting trade-offs: 
 
 {% include figure.html path="assets/img/comp_table_placeholder.png" class="img-fluid" %}
 
 (will construct our own version of this table)
 
+[CITE]
+
+| Approach      | Schedule   | Bubble Ratio        | Convergence | Extra Mem | Extra Comp | Extra Comm |  
+| ------------- | ---------- | ------------------- | ----------- | --------- | ---------- | ---------- |
+| GPipe         | Synch      | $\frac{D}{D+T}$     |  Excellent  |           |
+| GEMS          | Synch      |  $1 - \Theta(1/D)$  |  Excellent  | X         |
+| DAPPLE        | Synch      |  $\frac{D}{D+T}$    |  Excellent  |           |
+| Chimera       | Synch      |  $\frac{D}{D+2T}$   |  Excellent  | X         |
+| Megatron-LM   | Synch      | $\frac{D}{vT}$      |  Excellent  |           |
+| ZeroBubble    | Synch      | $0$                 |  Excellent  |           |
+| AMPNet        | Async      | $0$                 |  Poor       |           |
+| PipeDream     | Async      | $0$                 |  Good       | X         |    
+| XPipe         | Async      | $0$                 |  Good       | X         |    
+| SpecTrain     | Async      | $0$                 |  Good       | X         |    
+| PipeDream-2BW | Async      | $0$                 |  Good       | X         |    
+| PipeMare      | Async      | $0$                 |  Good       | X         |    
+| AvgPipe       | Async      | $0$                 |  Good       | X         |    
+| WPipe         | Async      | $0$                 |  Good       | X         |    
+
 A survey of these approaches (cite) showed... (add explanation)
+
+[TODO] implicit compute cost: LR schedule constraint. 
 
 <!-- Compute extra memory, compute, and comms -->
 
