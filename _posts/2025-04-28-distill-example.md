@@ -78,7 +78,7 @@ Multiple types of parallelization techniques have emerged as model sizes and dis
 
 ## Parallel Model Training: Data vs Model Parallelism
 
-**Data parallelism** helps to parallelize computation by creating copies of the model on each accelerator, then partitioning, or "sharding", the data and distributing it to the different devices. The results must be aggregated for the backwards propogation step. This can help to distribute a small enough model over multiple GPUs, but cannot address the case when the model itself is too large to fit on a single GPU. 
+**Data parallelism** helps to parallelize computation by creating copies of the model on each accelerator, then partitioning, or "sharding", the data and distributing it to the different devices. The results must be aggregated for the backwards propagation step. This can help to distribute a small enough model over multiple GPUs, but cannot address the case when the model itself is too large to fit on a single GPU. 
 
 <!-- note: in multiple papers (survey paper, zero bubble paper) data parallelism is described this way,
  so I continued using this definition -->
@@ -140,13 +140,13 @@ If synchronous scheduling is the most statistically efficient, why would you eve
 
 ## Practical Approaches to Pipeline Parallelism
 
-Now, we'll look at several different pipeline parallelism approaches and how they choose to mitigate  different tradeoffs. As a reminder, in the ideal case, we'd like to acheive: 
+Now, we'll look at several different pipeline parallelism approaches and how they choose to mitigate  different tradeoffs. As a reminder, in the ideal case, we'd like to achieve: 
   - minimal memory consumption 
   - low communication overhead
   - efficient compute utilization
     - For synchronous approaches, we would like to reduce the bubble ratio
   - maximum statistical efficiency
-    - For asynchronous approahces, we have to handle weight staleness and inconsistency
+    - For asynchronous approaches, we have to handle weight staleness and inconsistency
 
 Finally, we also want an **even workload distributed across our GPUs**, or **load balance**, since one GPU working very hard and another not working that hard is not much better than one active GPU and one idle GPU. 
 
@@ -162,6 +162,9 @@ One simple way to somewhat improve on this naive baseline is to **segment mini-b
 - The user specifies the number of micro-batches and the number of model partitions (equal to the number of available GPUs)
 - GPipe stores one version of weights total
 
+A direct consequence of GPipe's approach is higher peak memory required to store activation values. This is somewhat mitigated by discarding and re-calculating activation values during the backward pass. However, that does introduce a 20% increase in computation overhead <d-cite key="fan2021dapple"></d-cite>. 
+
+
 ### PipeDream: The Representative Asynchronous Approach
 
 <!-- PipeDream first introduced the term "pipeline parallelism" in a paper released in 2018. PipeDream systematically partitions DNN layers to keep all GPUs productive and minimize communication. It introduced the idea of pipelining minibatches in addition to partitioning layers of the model.  -->
@@ -173,6 +176,18 @@ Pipedream by Narayanan et. al. <d-cite key="narayanan2019pipedream"></d-cite> is
     - This technically reduces statistical efficiency since gradients can be computed on stale weights.
 - Pipedream continuously calculates the number of optimal minibatches at runtime.
 - Pipedream **stores one version of weights** per mini-batch
+
+
+{% include figure.html path="assets/img/1f1b.png" class="img-fluid" %}
+
+<div class="caption"> 
+  Image Source: Naranyan et. al.  <d-cite key="narayanan2019pipedream"></d-cite> 
+</div>
+
+Pipedream introduced the "interleaved 1F1B" or "one forward one backward" approach to asynchronous pipeline scheduling that reduces bubbles under asynchronous scheduling to zero. 
+
+
+
 
 ### PipeMare
 In one sentence, Pipemare by Yang et. al. <d-cite key="yang2021pipemare"></d-cite> conserves memory usage by approximating weights that appeared earlier in the pipeline, instead of caching them; then to ensure convergence, it also schedules learning rate accordingly. It strikes a perfect balance between GPipe and PipeDream. 
@@ -193,9 +208,9 @@ $$w^+ = w - \nabla f(w')$$
 
 where for GPipe, $w' = w$, and for PipeDream, $w'$ stands for a single version of gradient that is somewhat earlier than $w$. 
 
-Note the trade off between GPipe and Pipedream: if we wish to update weights $w$ using only freshly computed weights, the device will sequentially wait for a certain weight $w_t$ at timestep $t$ to (1) go throught forward pass; and then (2) go through back propagation path and produce an associated gradient, before computing the final update, which requires a long wait. 
+Note the trade off between GPipe and Pipedream: if we wish to update weights $w$ using only freshly computed weights, the device will sequentially wait for a certain weight $w_t$ at timestep $t$ to (1) go through forward pass; and then (2) go through back propagation path and produce an associated gradient, before computing the final update, which requires a long wait. 
 
-PipeDream, on the other hand, updates weight $w$ using some version of weight $w_t$, and while waiting for $w_t$ to make its way all the way across forward and backward pass to produce $\nabla f_t$, the device can spend the time processing other weights. The problem is, while $w_t$ makes its round trip throught forward-backward prop, all newer weight copies $w_{t+1}, w_{t+2}$... shall be stored to the device, before $w_t$ finally completes the round trip, be used to update the model weights, and gets removed, which is memory intensive. 
+PipeDream, on the other hand, updates weight $w$ using some version of weight $w_t$, and while waiting for $w_t$ to make its way all the way across forward and backward pass to produce $\nabla f_t$, the device can spend the time processing other weights. The problem is, while $w_t$ makes its round trip through forward-backward prop, all newer weight copies $w_{t+1}, w_{t+2}$... shall be stored to the device, before $w_t$ finally completes the round trip, be used to update the model weights, and gets removed, which is memory intensive. 
 
 Now, Pipemare simultaneously resolved GPipe and PipeMare's issue to some extend. Since it doesn't wait for any weights, the idling bubble is small; since it doesn't store older weights, it is memory efficient. 
 
@@ -213,11 +228,34 @@ PipeMare resolves these two problems separately:
 
 ### Zero-Bubble: An Improved Synchronous Approach
 
+The Zero-Bubble (or "ZB") synchronous approach introduced by Qi et al. <d-cite key="qi2024zero"></d-cite> achieved  zero-bubble pipeline parallelism under synchronous scheduling. This was made possible by their innovation of **splitting up the gradient computation in the backward pass**, such that this, too, could be interleaved to eliminate bubbles. The approach demonstrates that grouping the backward pass calculations together sequential is unnecessary. 
+
+{% include figure.html path="assets/img/ZB_Split.png" class="img-fluid" %}
+<div class="caption"> 
+  Image Source: Qi et. al.  <d-cite key="qi2024zero"></d-cite> 
+</div>
+
+
+
+There are two version of the ZB approach: ZB-H1, which consumes the same peak memory usage as 1F1B introduced by PipeDream <d-cite key="narayanan2019pipedream"></d-cite>, and ZB-H2, which eliminates bubbles completely but increases peak memory usage and has some extra computation needed. To eliminate bubbles completely, ZB-H2 also bypasses optimizer synchronization and instead introduces a validation and rollback step to rectify any miscalculations after the optimizer step (this is what results in some extra computation).
+
+{% include figure.html path="assets/img/ZB-sched.png" class="img-fluid" %}
+<div class="caption"> 
+  ZB-H1 schedule (top) and ZB-H2 schedule (bottom) Image Source: Qi et. al.  <d-cite key="qi2024zero"></d-cite> 
+</div>
+
+{% include figure.html path="assets/img/rollback.png" class="img-fluid" %}
+<div class="caption"> 
+  Optimizer validation and rollback. Image Source: Qi et. al.  <d-cite key="qi2024zero"></d-cite> 
+</div>
+
+While ZB has a handcrafted schedule that works under the assumption that the execution times of the forward pass and each interleaved backward pass calculation are identical, an algorithm to automatically compose schedules is also introduced. The scheduling problem is formulated as integer linear programming that can be solved by an off-the-shelf ILP solver.
+
 
 
 ## Comparisons and Trade-offs
 
-Finally, how do these approaches compare in their memory use, computate utilization, and learning convergence? 
+Finally, how do these approaches compare in their memory use, compute utilization, and learning convergence? 
 
 <div class="col mt-3">
     <div class="col-sm mt-3 mt-md-0">
