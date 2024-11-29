@@ -168,6 +168,8 @@ One simple way to somewhat improve on this naive baseline is to **segment mini-b
 
 A direct consequence of GPipe's approach is higher peak memory required to store more activation values. This is somewhat mitigated by discarding and re-calculating activation values during the backward pass. However, re-calculation introduces a 20% increase in computation overhead <d-cite key="qi2024zero"></d-cite>. 
 
+It shall also be noted that since GPipe is a synchronous approach, some computing devices may need to be waiting for the weight to synchronize, causing nontrivial bubble ratios.
+
 
 ### PipeDream: The Representative Asynchronous Approach
 
@@ -186,41 +188,39 @@ Pipedream by Narayanan et. al. <d-cite key="narayanan2019pipedream"></d-cite> is
   Image Source: Naranyan et. al.  <d-cite key="narayanan2019pipedream"></d-cite> 
 </div>
 
-Pipedream introduced the "interleaved 1F1B" or "one forward one backward" approach, where forward and backward passes of different micro-batches are interleaved to eliminate bubbles. 
+Pipedream introduced the "interleaved 1F1B" or "one forward one backward" approach, where forward and backward passes of different micro-batches are interleaved to eliminate bubbles. However, PipeDream caches the weights used in the forward pass, all the way until these weights are used for computing gradient in the backward passes again, it has to store a lot of stale model weight. 
 
 ### PipeMare: Improved Asynchronous Approach
-In one sentence, Pipemare by Yang et. al. <d-cite key="yang2021pipemare"></d-cite> conserves memory usage by approximating weights that appeared earlier in the pipeline, instead of caching them; then to ensure convergence, it also schedules learning rate accordingly. It strikes a perfect balance between GPipe and PipeDream. 
+Pipemare by Yang et. al. <d-cite key="yang2021pipemare"></d-cite> improves the memory usage of PipeDream by approximating weights that appeared earlier in the pipeline, instead of caching them; then to ensure convergence, it also schedules learning rate accordingly. It strikes a perfect balance between GPipe and PipeDream, as it has virtually no bubble, and its memory usage is also relatively low.
 
-PipeDream uses the 1F1B mechanism to maintain a low bubble ratio, but since it computes the gradient by using the same weight in forward and backward passes, it has to store a lot of extra weight. 
-
-PipeMare, on the other hand, simply uses whatever weight $W$ in the memory to compute the gradient, and does not use the cached historical weights. 
+The idea of PipeMare is to first do whatever PipeDream does, but then *simply use whatever weight $W$ in the memory to compute the gradient during backward step*, and avoid caching stale weights like PipeDream originally does. Since no device is waiting for a specific version of weights, there is no bubble; since there's no need to store older weights, the usage of memory is efficient. Both PipeDream and GPipe's issues are resolved!
 
 Sounds intuitive, but what could go wrong?
 
-Note that at the $k$th fully connected NN layer, the computed gradient $g_k$ from backpropagation steps depends on two things: (1) the current weight stored in device $d_k$ , and (2) the loss at the model output layer, which depends on the forward pass at $k$th layer, processed by the same device $d_k$ at an earlier time, using an earlier version of model weights. In essence, it computes the gradient using two different versions of model weights! 
+Imaging training a stack of fully connected layers. Note that at the $k$th fully connected layer, computing gradient $g_k$ from backpropagation steps depends on two things: (1) some version of model weight stored in device $d_k$ , and (2) the loss at the model output layer, which depends on the forward pass at $k$th layer, processed by the same device $d_k$ at an earlier time, using an earlier version of model weights. In essence, the idea of PipeMare would result in computing the gradient using two different versions of model weights! We express this dependency as: 
 
-$$w^+ = w - \nabla f(w_{older}, w_{newer})$$
+$$w^+ = w - \nabla f(w_{\text{older}}, w_{\text{newer}})$$
 
-In comparison, gradient descent is only defined using a fixed version of function input (ie. model weights), as below:
+This phenomenon is called **Delay Discrepancy**. In comparison, gradient descent is only defined using a fixed version of function input (ie. model weights), as below:
 
 $$w^+ = w - \nabla f(w')$$
 
-where for GPipe, $w' = w$, and for PipeDream, $w'$ stands for a single version of gradient that is somewhat earlier than $w$. 
+where for GPipe, $w' = w$, and for PipeDream, $w'$ stands for a single version of stale model weight. 
 
-Note the trade off between GPipe and Pipedream: if we wish to update weights $w$ using only freshly computed weights, the device will sequentially wait for a certain weight $w_t$ at timestep $t$ to (1) go through forward pass; and then (2) go through back propagation path and produce an associated gradient, before computing the final update, which requires a long wait. 
+<!-- Note the trade off between GPipe and Pipedream: if we wish to update weights $w$ using only freshly computed weights, the device will sequentially wait for a certain weight $w_t$ at timestep $t$ to (1) go through forward pass; and then (2) go through back propagation path and produce an associated gradient, before computing the final update, which requires a long wait. 
 
-PipeDream, on the other hand, updates weight $w$ using some version of weight $w_t$, and while waiting for $w_t$ to make its way all the way across forward and backward pass to produce $\nabla f_t$, the device can spend the time processing other weights. The problem is, while $w_t$ makes its round trip through forward-backward prop, all newer weight copies $w_{t+1}, w_{t+2}$... shall be stored to the device, before $w_t$ finally completes the round trip, be used to update the model weights, and gets removed, which is memory intensive. 
+PipeDream, on the other hand, updates weight $w$ using some version of weight $w_t$, and while waiting for $w_t$ to make its way all the way across forward and backward pass to produce $\nabla f_t$, the device can spend the time processing other weights. The problem is, while $w_t$ makes its round trip through forward-backward prop, all newer weight copies $w_{t+1}, w_{t+2}$... shall be stored to the device, before $w_t$ finally completes the round trip, be used to update the model weights, and gets removed, which is memory intensive.  -->
+<!-- 
+Now, PipeMare simultaneously resolved both the bubble ratio issue and to some extend. Since it doesn't wait for any weights, the idling bubble is small; since it doesn't store older weights, it is memory efficient.  -->
 
-Now, Pipemare simultaneously resolved GPipe and PipeMare's issue to some extend. Since it doesn't wait for any weights, the idling bubble is small; since it doesn't store older weights, it is memory efficient. 
+This discrepancy brings two issues: 
 
-However, this brings two additional issues: 
+1. **[T1]** Since we are performing gradient descent using inconsistent versions of weights, would convergence be an issue: 
+2. **[T2]** If $w^+ = w - \nabla f(w_{older}, w_{newer})$ then how do we know $w_{older}$ without caching it?  
 
-1. Since we are performing gradient descent using inconsistent versions of weights, would convergence be an issue: 
-2. If $w^+ = w - \nabla f(w_{older}, w_{newer})$ then how do we know $w_{older}$ without caching it?  
+PipeMare's novelty resolves these two problems separately: 
 
-PipeMare resolves these two problems separately: 
-
-For 1, we locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then the gradient update can be seen as   
+For **T1**, we locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then the gradient update can be seen as   
 $$w_{i+1} = w_i - \alpha \nabla f(...) = w_t - \alpha \lambda w_{t-\text{delay}} + \alpha \eta$$   
 where $\alpha$ is the learning rate, ``delay'' is how long a particular version of gradient have delayed, and $\eta$ is the estimation of noise caused by asynchronous gradients. Then if we treat the collection of all versions of gradient over time as a single vector   
 $$W_t = [w_t, w_{t-1}, ...]^\top$$  
@@ -229,9 +229,12 @@ $$W_{t+1} = CW_t + \alpha \eta e_1$$
 where $C$ is some suitable matrix, and $e_1$ is one-hot vector with first entry being 1. Convergence of gradient descent would hence depend on $C$'s eigenvalues, or equivalently, the roots of the characteristic polynomial 
 $p(x) = x^{\text{delay}+1} - x^{\text{delay}} + \alpha \lambda$, to lie in the unit circle; solve for an appropriate $\alpha$ gives us a learning rate that lead to convergence. Specifically, <d-cite key="narayanan2019pipedream"></d-cite> shows that longer delays require smaller step sizes to ensure convergence. 
 
-For 2, we once again locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then we can can approximate the gradient update equation as   
+For **T2**, we once again locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then we can can approximate the gradient update equation as   
 $$w^+ = w - \nabla f(w_{older}, w_{newer}) \approx w - \lambda w_{newer} - \Delta (w_{newer} - w_{older}) + \eta $$  
-where $\eta$ denotes a noise term and $\Delta$ is the sensitivity of $\nabla f$ to the discrepancy [todo] [define] of gradient. Now we mimic the strategy shown earlier, express the gradient update equation as a linear equation, and solve for appropriate parameters to make its eigenvalues stay in the unit ball. 
+where $\eta$ denotes a noise term and $\Delta$ is the sensitivity of $\nabla f$ to the discrepancy of gradient. Now we can mimic the strategy shown earlier, express the gradient update equation as a linear equation, solve for appropriate learning rate $\alpha$ that makes its eigenvalues stay in the unit ball, and hence the weight update rule would be stable; Finally, we substitute approximation  
+$$w_{older} \approx w_{newer} - \Delta\text{time}(w_{older}, w_{newer}) \cdot \delta$$  
+into the linear equation mentioned earlier in **T2**, where $\Delta\text{time}()$ denotes the difference in time-stamp, and $\delta$ is a trainable parameter that estimates how quickly model weights change over time. This allows estimating older weights using newer weights, eliminating the need of caching multiple version of stale weights, as PipeDream did.
+
 
 ### Zero-Bubble: An Improved Synchronous Approach
 
