@@ -259,4 +259,6 @@ Finally, how do these approaches compare in their memory use, compute utilizatio
   Image Source: Guan et. al. <d-cite key="guan2024advances"></d-cite> 
 </div>
 
+
+
 <!-- Compute extra memory, compute, and comms -->
