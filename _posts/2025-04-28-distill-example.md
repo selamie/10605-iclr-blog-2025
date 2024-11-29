@@ -154,15 +154,12 @@ Finally, we also want an **even workload distributed across our GPUs**, or **loa
 
 One simple way to somewhat improve on this naive baseline is to **segment mini-batches of data** so that at least, during each forward and backward pass, each device can be working on a different segment of the mini-batch--or a **"micro-batch"**. This is how GPipe by Huang et. al. <d-cite key="huang2019gpipe"></d-cite>  tries to improve on the naive baseline, and it's representative of most practical synchronous approaches.  
 
-<!-- insert fig -->
-
 - GPipe **communicates** only the output data of one model partition (possibly larger or smaller than a layer)
-- GPipe synchronizes gradients across micro-batches within a mini-batch
-    - This leads to more idle time, or bubbles, for the system of GPUs.  
+- GPipe **synchronizes gradients** and the optimizer step across micro-batches within a mini-batch
 - The user specifies the number of micro-batches and the number of model partitions (equal to the number of available GPUs)
 - GPipe stores one version of weights total
 
-A direct consequence of GPipe's approach is higher peak memory required to store activation values. This is somewhat mitigated by discarding and re-calculating activation values during the backward pass. However, that does introduce a 20% increase in computation overhead <d-cite key="fan2021dapple"></d-cite>. 
+A direct consequence of GPipe's approach is higher peak memory required to store more activation values. This is somewhat mitigated by discarding and re-calculating activation values during the backward pass. However, re-calculation introduces a 20% increase in computation overhead <d-cite key="fan2021dapple"></d-cite>. 
 
 
 ### PipeDream: The Representative Asynchronous Approach
@@ -253,27 +250,29 @@ There are two version of the ZB approach: ZB-H1, which consumes the same peak me
 While ZB has a handcrafted schedule that works under the assumption that the execution times of the forward pass and each interleaved backward pass calculation are identical, an algorithm to automatically compose schedules is also introduced. The scheduling problem is formulated as integer linear programming that can be solved by an off-the-shelf ILP solver.
 
 ## Comparisons and Trade-offs
-Due to limited space, the previous section only discussed a few of these approaches in detail. However, if we broadly examine pipeline parallelism methods and their performance metrics in e.g. memory usage, computation resource utilization, and convergence, we see some interesting trade-offs: 
+The previous section only discussed a few of these approaches in detail. However, if we broadly examine pipeline parallelism methods and their performance metrics in memory usage, computation resource utilization, and convergence, we see some interesting trade-offs: 
 
-[CITE]
-
-| Approach      | Schedule   | Bubble Ratio        | Convergence | Extra Mem | Extra Comp | Extra Comm |  
+| Approach      | Schedule   | Bubble Ratio        | Convergence | Extra Memory | Extra Compute | Extra Communication |  
 | ------------- | ---------- | ------------------- | ----------- | --------- | ---------- | ---------- |
-| GPipe         | Synch      | $\frac{D}{D+T}$     |  Excellent  |           |
-| GEMS          | Synch      |  $1 - \Theta(1/D)$  |  Excellent  | X         |
-| DAPPLE        | Synch      |  $\frac{D}{D+T}$    |  Excellent  |           |
-| Chimera       | Synch      |  $\frac{D}{D+2T}$   |  Excellent  | X         |
-| Megatron-LM   | Synch      | $\frac{D}{vT}$      |  Excellent  |           |
-| ZeroBubble    | Synch      | $0$                 |  Excellent  |           |
-| AMPNet        | Async      | $0$                 |  Poor       |           |
-| PipeDream     | Async      | $0$                 |  Good       | X         |    
-| XPipe         | Async      | $0$                 |  Good       | X         |    
-| SpecTrain     | Async      | $0$                 |  Good       | X         |    
-| PipeDream-2BW | Async      | $0$                 |  Good       | X         |    
-| PipeMare      | Async      | $0$                 |  Good       | X         |    
-| AvgPipe       | Async      | $0$                 |  Good       | X         |    
-| WPipe         | Async      | $0$                 |  Good       | X         |    
+| GPipe         | Synch      | $\frac{D}{D+T}$     |  Excellent  |           |            |
+| GEMS          | Synch      |  $1 - \Theta(1/D)$  |  Excellent  | X         |            |  X
+| DAPPLE        | Synch      |  $\frac{D}{D+T}$    |  Excellent  |           |            |
+| Chimera       | Synch      |  $\frac{D}{D+2T}$   |  Excellent  | X         |            | X
+| Megatron-LM   | Synch      | $\frac{D}{vT}$      |  Excellent  |           |            | X
+| ZeroBubble*   | Synch      | $0$                 |  Excellent  |           | X          |  
+| AMPNet        | Async      | $0$                 |  Poor       |           |            |
+| PipeDream     | Async      | $0$                 |  Good       | X         |            |
+| XPipe         | Async      | $0$                 |  Good       | X         | X          |
+| SpecTrain     | Async      | $0$                 |  Good       | X         | X          |
+| PipeDream-2BW | Async      | $0$                 |  Good       | X         |            |
+| PipeMare      | Async      | $0$                 |  Good       | X         | X          |
+| AvgPipe       | Async      | $0$                 |  Good       | X         |            |  X   
+| WPipe         | Async      | $0$                 |  Good       | X         |            |
 
-A survey of these approaches (cite) showed... (add explanation)
+<div class="caption"> 
+  The data comprising this table is sourced from a survey by Guan et. al.  <d-cite key="guan2024advances"></d-cite>
+  * Using ZB-H2 method.  
+</div>
 
-[TODO] implicit compute cost: LR schedule constraint. 
+## Conclusion and Discussion
+Ultimately, for the ideal balance of zero bubbles in the pipeline, combined with synchronous training semantics, and a schedule that is optimally calculated with integer linear programming (ILP), ZeroBubble's ZB-H2 approach would be an ideal starting point and represent the current state of the art in pipeline parallelism. However, they note that the algorithm for computing ideal schedules may not scale well with an off-the-shelf ILP solver. This could lead to new approaches to optimize the algorithm, or construct ILP solutions specifically for machine learning applications. Like other trends in machine learning, such as [custom-built accelerators](https://cloud.google.com/tpu), pipeline parallelism could benefit from optimization tools specifically customized to machine learning applications. In addition, tolerance for additional memory and computation overhead should be assessed for each learning task when choosing which approach to apply. 
