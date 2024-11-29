@@ -241,12 +241,12 @@ For **(2)**, we substitute approximation
 
 $$w_{older} \approx w_{newer} - \Delta\text{time}(w_{older}, w_{newer}) \cdot \delta$$  
 
-into the linear equation mentioned earlier, where $\Delta\text{time}()$ denotes the difference in time-stamp, and $\delta$ is a trainable parameter that estimates how quickly model weights change over time. This allows estimating older weights using newer weights, eliminating the need of caching multiple version of stale weights, as PipeDream did.
+into the linear equation mentioned earlier, where $\Delta\text{time}()$ denotes the difference in time-stamp, and $\delta$ is a trainable parameter that estimates how quickly model weights change over time. This allows estimating older weights using newer weights, eliminating the need to cache multiple versions of stale weights, as PipeDream did.
 
 
 ### Zero-Bubble: An Improved Synchronous Approach
 
-The Zero-Bubble (or "ZB") synchronous approach introduced by Qi et al. <d-cite key="qi2024zero"></d-cite> achieved  zero-bubble pipeline parallelism under synchronous scheduling. This was made possible by their innovation of **splitting up the gradient computation in the backward pass**, such that this, too, could be interleaved to eliminate bubbles. The approach demonstrates that grouping the backward pass calculations together sequential is unnecessary. 
+The Zero-Bubble (or "ZB") synchronous approach introduced by Qi et al. <d-cite key="qi2024zero"></d-cite> achieved  zero-bubble pipeline parallelism under synchronous scheduling. This was made possible by their innovation of **splitting up the gradient computation in the backward pass**, such that this, too, could be interleaved to eliminate bubbles. The approach demonstrates that grouping the backward pass calculations together sequentially is unnecessary. 
 
 {% include figure.html path="assets/img/ZB_Split.png" class="img-fluid" %}
 <div class="caption"> 
@@ -308,11 +308,11 @@ Some of the techniques in this comparison table also require extra memory, compu
 Observe that these approaches can be broadly categorized as follows:
 
 1. Synchronous approaches, like GPipe and DAPPLE, which do not use stale weights for computing gradients. 
-    - These wait for newest weights before computing gradients 
+    - These wait for newest weights before computing gradients. 
     - Computing devices may need to stay idle, leading to nonzero bubble ratios. 
     - Due to being synchronous, they have high statistical efficiency and therefore excellent convergence. 
 2. Asynchronous approaches that uses stale weights for gradient calculation, which allows devices to never go idle. 
-    - These effectively eliminate bubbles 
+    - These effectively eliminate bubbles. 
     - Due to being asynchronous, they have relatively lower statistical efficiency, and slightly worse convergence behavior. 
     - Asynchronous approaches can further be refined as: 
         1. Approaches that caches stale weights to handle weight discrepancy, like PipeDream, AvgPipe, and WPipe. These approaches don't need extra computation overhead, but always uses no less than $2M_\theta$ memory for storing weights. 
