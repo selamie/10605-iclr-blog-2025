@@ -282,20 +282,20 @@ The previous section only discussed a few of these approaches in detail. However
 
 | Approach      | Bubble Ratio                    | Convergence | Weights Memory      | Activations Memory                    | 
 |---------------|---------------------------------|-------------|---------------------|---------------------------------------|
-| GPipe         | $(D - 1)/(T + D - 1)^*$         | Excellent   | $M_\theta$          | $T \times M_a$                        |              |               |                     |
-| GEMS          | $\approx (D - 1)/(D + 1/2)^*$   | Excellent   | $2M_\theta$         | $M_a$                                 |              |               |                     |
-| DAPPLE        | $(D - 1)/(D + T - 1)^*$         | Excellent   | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
-| Chimera       | $(D - 2)/(2T + D - 2)^*$        | Excellent   | $2M_\theta$         | $[(D/2 + 1)M_a, D \times M_a]^*$      |              |               |                     |
-| Megatron-LM   | $(D - 1)/(v \times T)$          | Excellent   | $M_\theta$          | $T \times M_a$                        |              |               |                     |
-| ZeroBubble (ZB-H2)| $\approx 0\%$               | Excellent   | $M_\theta$          | $(2D - 1) \times M_a^\S$              |              |               |                     |
-| AMPNet        | $\approx 0\%$                   | Poor        | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
-| PipeDream     | $\approx 0\%$                   | Good        | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
-| XPipe         | $\approx 0\%$                   | Good       | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
-| SpecTrain     | $\approx 0\%$                   | Good       | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
-| PipeDream-2BW | $\approx 0\%$                   | Good        | $2M_\theta$         | $[M_a, D \times M_a]$                 |              |               |                     |
-| PipeMare      | $\approx 0\%$                   | Good        | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
-| AvgPipe       | $\approx 0\%$                   | Good        | $P \times M_\theta$ | $[1, D \times T] \times P \times M_a$ |              |               |                     |
-| WPipe         | $\approx 0\%$                   | Good        | $2M_\theta$         | $T \times M_a$                        |              |               |                     |
+| GPipe         | $(D - 1)/(T + D - 1)$           | Excellent   | $M_\theta$          | $T \times M_a$                        |           
+|GEMS           | $(D - 1)/(D+1/2)$               | Excellent   | $2M_\theta$         | $M_a$                                 |
+| DAPPLE        | $(D - 1)/(D + T - 1)$           | Excellent   | $M_\theta$          | $[M_a, D \times M_a]$                 |              
+| Chimera       | $(D - 2)/(2T + D - 2)$          | Excellent   | $2M_\theta$         | $[(D/2 + 1)M_a, D \times M_a]  $      |             
+| Megatron-LM   | $(D - 1)/(v \times T)$          | Excellent   | $M_\theta$          | $T \times M_a$                        |             
+| ZeroBubble (ZB-H2)| $\approx 0\%$               | Excellent   | $M_\theta$          | $(2D - 1) \times M_a$                 |             
+| AMPNet        | $\approx 0\%$                   | Poor        | $M_\theta$          | $[M_a, D \times M_a]$                 |             
+| PipeDream     | $\approx 0\%$                   | Good        | $M_\theta$          | $[M_a, D \times M_a]$                 |             
+| XPipe         | $\approx 0\%$                   | Good        | $M_\theta$          | $[M_a, D \times M_a]$                 |              
+| SpecTrain     | $\approx 0\%$                   | Good        | $M_\theta$          | $[M_a, D \times M_a]$                 |              
+| PipeDream-2BW | $\approx 0\%$                   | Good        | $2M_\theta$         | $[M_a, D \times M_a]$                 |             
+| PipeMare      | $\approx 0\%$                   | Good        | $M_\theta$          | $[M_a, D \times M_a]$                 |             
+| AvgPipe       | $\approx 0\%$                   | Good        | $P \times M_\theta$ | $[1, D \times T] \times P \times M_a$ |             
+| WPipe         | $\approx 0\%$                   | Good        | $2M_\theta$         | $T \times M_a$                        |             
 
 <div class="caption"> 
   The data comprising this table is replicated from a survey by Guan et. al.  <d-cite key="guan2024advances"></d-cite>
