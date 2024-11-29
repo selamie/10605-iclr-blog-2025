@@ -301,5 +301,7 @@ The previous section only discussed a few of these approaches in detail. However
   The data comprising this table is replicated from a survey by Guan et. al.  <d-cite key="guan2024advances"></d-cite>
 </div>
 
+Some of the techniques in this comparison table also require extra memory, computation, and communication overhead that do not scale directly with the included parameters. 
+
 ## Conclusion and Discussion
 Ultimately, for the ideal balance of zero bubbles in the pipeline, combined with synchronous training semantics, and a schedule that is optimally calculated with integer linear programming (ILP), ZeroBubble's ZB-H2 approach would be an ideal starting point and represent the current state of the art in pipeline parallelism. However, they note that the algorithm for computing ideal schedules may not scale well with an off-the-shelf ILP solver. This could lead to new approaches to optimize the algorithm, or construct ILP solutions specifically for machine learning applications. Like other trends in machine learning, such as [custom-built accelerators](https://cloud.google.com/tpu), pipeline parallelism could benefit from optimization tools specifically customized to machine learning applications. In addition, tolerance for additional memory and computation overhead should be assessed for each learning task when choosing which approach to apply. 
