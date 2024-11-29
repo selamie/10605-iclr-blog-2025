@@ -1,7 +1,7 @@
 ---
 layout: distill
 title: The Frontier of Pipeline Parallelism
-description: Comparing approaches to resolving the pareto frontier in distributed deep learning
+description: Comparing approaches to resolving the pareto frontier in parallel model training at scale
 date: 2024-11-29
 future: true
 htmlwidgets: true
