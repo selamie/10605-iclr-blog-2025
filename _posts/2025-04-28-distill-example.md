@@ -152,14 +152,14 @@ Finally, we also want an **even workload distributed across our GPUs**, or **loa
 
 ### GPipe: The Representative Synchronous Approach
 
-One simple way to somewhat improve on this naive baseline is to **segment mini-batches of data** so that at least, during each forward and backward pass, each device can be working on a different segment of the mini-batch--or a **"micro-batch"**. This is how GPipe by Huang et. al. <d-cite key="huang2019gpipe"></d-cite>  tries to improve on the naive baseline, and it's representative of most practical synchronous approaches.  
+One simple way to somewhat improve on this naive baseline is to **segment mini-batches of data** so that at least, during each forward and backward pass, each device can be working on a different segment of the mini-batch--or a **"micro-batch"**. This is how GPipe by Huang et. al. <d-cite key="huang2019gpipe"></d-cite>  tries to improve on the naive baseline, and it is representative of most practical synchronous approaches.  
 
 - GPipe **communicates** only the output data of one model partition (possibly larger or smaller than a layer)
 - GPipe **synchronizes gradients** and the optimizer step across micro-batches within a mini-batch
 - The user specifies the number of micro-batches and the number of model partitions (equal to the number of available GPUs)
 - GPipe **stores one version of weights total**
 
-A direct consequence of GPipe's approach is higher peak memory required to store more activation values. This is somewhat mitigated by discarding and re-calculating activation values during the backward pass. However, re-calculation introduces a 20% increase in computation overhead <d-cite key="fan2021dapple"></d-cite>. 
+A direct consequence of GPipe's approach is higher peak memory required to store more activation values. This is somewhat mitigated by discarding and re-calculating activation values during the backward pass. However, re-calculation introduces a 20% increase in computation overhead <d-cite key="qi2024zero"></d-cite>. 
 
 
 ### PipeDream: The Representative Asynchronous Approach
@@ -250,7 +250,7 @@ There are two version of the ZB approach: ZB-H1, which consumes the same peak me
 While ZB has a handcrafted schedule that works under the assumption that the execution times of the forward pass and each interleaved backward pass calculation are identical, an algorithm to automatically compose schedules is also introduced. The scheduling problem is formulated as integer linear programming that can be solved by an off-the-shelf ILP solver.
 
 ## Comparisons and Trade-offs
-The previous section only discussed a few of these approaches in detail. However, if we broadly examine pipeline parallelism methods and their performance metrics in memory usage, computation resource utilization, and convergence, we see some interesting trade-offs. Below is a table and notation key comparing different approaches as compiled by Guan et. al. <d-cite key="guan2024advances"></d-cite>.
+The previous section only discussed a few of these approaches in detail. However, if we broadly examine pipeline parallelism methods and their performance metrics in memory usage, computation resource utilization, and convergence, we see some interesting trade-offs. Below is a notation key and table comparing different approaches as compiled by Guan et. al. <d-cite key="guan2024advances"></d-cite>.
 
 <!-- | Approach      | Schedule   | Bubble Ratio        | Convergence | |Extra Memory | Extra Compute | Extra Communication |  
 | ------------- | ---------- | ------------------- | ----------- | |--------- | ---------- | ---------- |
