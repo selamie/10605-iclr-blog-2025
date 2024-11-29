@@ -225,8 +225,6 @@ The Zero-Bubble (or "ZB") synchronous approach introduced by Qi et al. <d-cite k
   Image Source: Qi et. al.  <d-cite key="qi2024zero"></d-cite> 
 </div>
 
-
-
 There are two version of the ZB approach: ZB-H1, which consumes the same peak memory usage as 1F1B introduced by PipeDream <d-cite key="narayanan2019pipedream"></d-cite>, and ZB-H2, which eliminates bubbles completely but increases peak memory usage and has some extra computation needed. To eliminate bubbles completely, ZB-H2 also bypasses optimizer synchronization and instead introduces a validation and rollback step to rectify any miscalculations after the optimizer step (this is what results in some extra computation).
 
 {% include figure.html path="assets/img/ZB-sched.png" class="img-fluid" %}
