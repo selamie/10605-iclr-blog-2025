@@ -289,7 +289,7 @@ The previous section only discussed a few of these approaches in detail. However
 | Megatron-LM   | $(D - 1)/(v \times T)$          | Excellent   | $M_\theta$          | $T \times M_a$                        |              |               |                     |
 | ZeroBubble (ZB-H2)| $\approx 0\%$               | Excellent   | $M_\theta$          | $(2D - 1) \times M_a^\S$              |              |               |                     |
 | AMPNet        | $\approx 0\%$                   | Poor        | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
-| PipeDream     | $\approx 0\%$                   | Good        | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
+| PipeDream     | $\approx 0\%$                   | Good        | $[M_\theta, D \times M_\theta]$          | $[M_a, D \times M_a]$                 |              |               |                     |
 | XPipe         | $\approx 0\%$                   | Good       | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
 | SpecTrain     | $\approx 0\%$                   | Good       | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
 | PipeDream-2BW | $\approx 0\%$                   | Good        | $2M_\theta$         | $[M_a, D \times M_a]$                 |              |               |                     |
