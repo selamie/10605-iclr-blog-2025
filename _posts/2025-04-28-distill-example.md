@@ -221,24 +221,23 @@ This discrepancy brings two issues:
 PipeMare's novelty involves resolving these two problems separately: 
 
 For **(1)**, we may locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then the gradient update can be seen as   
-<!-- $$w_{i+1} = w_i - \alpha \nabla f(...) = w_t - \alpha \lambda w_{t-\text{delay}} + \alpha \eta$$   
-where $\alpha$ is the learning rate, ``delay'' is how long a particular version of gradient have delayed, and $\eta$ is the estimation of noise caused by asynchronous gradients. Then if we treat the collection of all versions of gradient over time as a single vector   
-$$W_t = [w_t, w_{t-1}, ...]^\top$$  
-then the gradient update rule can be written as some linear equation:   
-$$W_{t+1} = CW_t + \alpha \eta e_1$$  
-where $C$ is some suitable matrix, and $e_1$ is one-hot vector with first entry being 1. Convergence of gradient descent would hence depend on $C$'s eigenvalues, or equivalently, the roots of the characteristic polynomial 
-$p(x) = x^{\text{delay}+1} - x^{\text{delay}} + \alpha \lambda$, to lie in the unit circle; solve for an appropriate $\alpha$ gives us a learning rate that lead to convergence. 
 
-For **T2**, we once again locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then we can can approximate the gradient update equation as    -->
-$$w^+ = w - \nabla f(w_{older}, w_{newer}) \approx w - \lambda w_{newer} - \Delta (w_{newer} - w_{older}) + \eta $$  
+$$w^+ = w - \nabla f(w_{older}, w_{newer}) \approx w - \lambda w_{newer} - \Delta (w_{newer} - w_{older}) + \eta $$
+
 where $\eta$ denotes a noise term and $\Delta$ is the sensitivity of $\nabla f$ to the discrepancy of gradient. Then if we treat the collection of all versions of gradient over time as a single vector   
+
 $$W_t = [w_t, w_{t-1}, ...]^\top$$  
+
 then the gradient update rule can be written as some linear equation:   
+
 $$W_{t+1} = CW_t + \alpha \eta e_1$$  
+
 where $C$ is some suitable matrix, and $e_1$ is one-hot vector with first entry being 1. Convergence of gradient descent can then be guaranteed by solving for a learning rate $\alpha$ that lets $C$'s eigenvalues stay in the unit ball, and hence the weight update rule would be stable. Specifically, <d-cite key="narayanan2019pipedream"></d-cite> shows that longer delays require smaller step sizes to ensure convergence. 
 
 For **(2)**, we substitute approximation  
+
 $$w_{older} \approx w_{newer} - \Delta\text{time}(w_{older}, w_{newer}) \cdot \delta$$  
+
 into the linear equation mentioned earlier, where $\Delta\text{time}()$ denotes the difference in time-stamp, and $\delta$ is a trainable parameter that estimates how quickly model weights change over time. This allows estimating older weights using newer weights, eliminating the need of caching multiple version of stale weights, as PipeDream did.
 
 
@@ -268,22 +267,6 @@ While ZB has a handcrafted schedule that works under the assumption that the exe
 ## Comparisons and Trade-offs
 The previous section only discussed a few of these approaches in detail. However, if we broadly examine pipeline parallelism methods and their performance metrics in memory usage, computation resource utilization, and convergence, we see some interesting trade-offs. Below is a notation key and table comparing different approaches as compiled by Guan et. al. <d-cite key="guan2024advances"></d-cite>.
 
-<!-- | Approach      | Schedule   | Bubble Ratio        | Convergence | |Extra Memory | Extra Compute | Extra Communication |  
-| ------------- | ---------- | ------------------- | ----------- | |--------- | ---------- | ---------- |
-| GPipe         | Synch      | $\frac{D}{D+T}$     |  Excellent  |           |            |
-| GEMS          | Synch      |  $1 - \Theta(1/D)$  |  Excellent  | |X         |            |  X
-| DAPPLE        | Synch      |  $\frac{D}{D+T}$    |  Excellent  | |          |            |
-| Chimera       | Synch      |  $\frac{D}{D+2T}$   |  Excellent  | |X         |            | X
-| Megatron-LM   | Synch      | $\frac{D}{vT}$      |  Excellent  | |          |            | X
-| ZeroBubble*   | Synch      | $0$                 |  Excellent  |           | X          |  
-| AMPNet        | Async      | $0$                 |  Poor       |           |            |
-| PipeDream     | Async      | $0$                 |  Good       | X         |            |
-| XPipe         | Async      | $0$                 |  Good       | X         | X          |
-| SpecTrain     | Async      | $0$                 |  Good       | X         | X          |
-| PipeDream-2BW | Async      | $0$                 |  Good       | X         |            |
-| PipeMare      | Async      | $0$                 |  Good       | X         | X          |
-| AvgPipe       | Async      | $0$                 |  Good       | X         |            |  X   
-| WPipe         | Async      | $0$                 |  Good       | X         |            | -->
 
 | Notation     | Description                                   |
 |------------|-----------------------------------------------|
