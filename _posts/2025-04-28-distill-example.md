@@ -29,18 +29,21 @@ bibliography: 2025-04-28-distill-example.bib
 #     for hyperlinks within the post to work correctly. 
 #   - please use this format rather than manually creating a markdown table of contents.
 
-# toc:
-#   - name: Equations
-#   - name: Images and Figures
-#     subsections:
-#     - name: Interactive Figures
-#   - name: Citations
-#   - name: Footnotes
-#   - name: Code Blocks
-#   - name: Diagrams
-#   - name: Tweets
-#   - name: Layouts
-#   - name: Other Typography?
+toc:
+  - name: "Motivation: Deep Learning and Distributed Systems"
+  - name: "Parallel Model Training: Data vs. Model Parallelism"
+    subsections:
+    - name: Naive Model Parallelism, and a Problem
+    - name: Pipeline Scheduling
+  - name: Practical Approaches to Pipeline Parallelism
+    subsections: 
+    - name: "GPipe: The Representative Synchronous Approach"
+    - name: "PipeDream: The Representative Asynchronous Approach"
+    - name: "PipeMare: Improved Asynchronous Approach"
+    - name: "Zero-Bubble: An Improved Synchronous Approach"
+  - name: Comparisons and Trade-offs
+  - name: Conclusion
+  - name: References
 
 # Below is an example of injecting additional post-specific styles.
 # This is used in the 'Layouts' section of this post.
@@ -126,17 +129,24 @@ If we were to create a plot representing what each of the devices are doing at a
   Image Source: Guan et. al.  <d-cite key="guan2024advances"></d-cite> 
 </div>
 
-Notice how each device (ie. GPU) is idle for most of the time? If we were to consider a very simplistic case where each task, whether it is forward or backward computation, takes exactly 1 second to complete, then each device is only working for $2$ out of the $2p$ seconds, meaning a lot of hardware is sitting around, doing nothing. This idling is indicated by the white spaces in the plot, known as "bubbles". The term "bubble ratio" is used to describe the ratio of such hardware idle time. 
+Notice how each device (ie. GPU) is idle for most of the time? If we were to consider a very simplistic case where each task, whether it is forward or backward computation, takes exactly 1 second to complete, then each device is only working for $2$ out of the $2p$ seconds, meaning a lot of hardware is sitting around, doing nothing. This idling is indicated by the white spaces in the plot, known as **bubbles**. The term **bubble ratio** is used to describe the ratio of such hardware idle time. 
+
+Evidently, having a high bubble ratio is inefficient usage of computing resources. By allocating computing tasks on GPU properly, we may make hardware usage or model training more efficient; such allocation strategies are called **Pipeline Scheduling**, which we discuss in the following section. 
 
 ### Pipeline Scheduling
 
 In general, pipeline parallelism can be divided into **synchronous** and **asynchronous** scheduling approaches. The naive approach described is a **synchronous** approach, referring to the fact that, periodically, all model parameters are synchronously updated with the accumulated gradients at a given stage. This is the most **statistically efficient** approach as each update uses all learned information. 
+As shown earlier in the example of naive pipeline parallelism, letting computing devices wait for the accumulated gradients leads to considerable device idling, and thus a high bubble ratio. 
 
-**Asynchronous** approaches do not wait to update with all accumulated gradients, allowing higher GPU utilization. But this also means that later mini-batches in the pipeline may derive gradients with stale weights, harming statistical efficiency. 
+**Asynchronous** approaches do not wait to update with all accumulated gradients, allowing higher GPU utilization and reduces bubble ratio. But this also means that later mini-batches in the pipeline may derive gradients with **stale weights**, which refers to weights that were computed in the past. This harms **statistical efficiency**, as we are updating the model weights using slightly outdated information. 
 
 Given the tradeoffs between the two schedules, any particular implementation of each uses different techniques to try to improve the bubble ratio in the synchronous case, and the learning efficiency in the asynchronous case. Each attempt to mitigate these traits can come with memory and communication trade-offs in exchange for more efficient compute utilization or statistical efficiency. 
 
-If synchronous scheduling is the most statistically efficient, why would you ever use an asynchronous schedule? Well, if the learning task were some ideal, parabolic convex optimization case, then it's possible there'd be no point to using any approach that harms the numerical progression down to some global minimum. But real machine learning problems are typically messier than this, and in most cases, rather than targeting an ideal convergence, we simply measure the model's actual performance on a problem. Essentially, **it may be advantageous to get to a less-than-ideal convergence faster with our available compute resources**, especially if "faster" is the difference between practically possible or not. 
+If synchronous scheduling is the most statistically efficient, why would you ever use an asynchronous schedule? Well, if the learning task were some ideal, parabolic convex optimization case, and moreover we have all the GPUs in the world, then it's possible there'd be no point to using any approach that harms the numerical progression down the true global minimum. But real machine learning scenarios typically have the following traits: 
+- Objective function is messier, so in most cases, we measure the model's actual performance on a problem, and accurate convergence to global min may not be the biggest concern, and 
+- We do not have all the GPUs in the world, so having some of them staying idle during model training is not economical. 
+  
+Essentially, **it may be advantageous to get to a less-than-ideal convergence faster while making better utilization of our available compute resources**, especially if "faster" is the difference between practically possible or not. 
 
 ## Practical Approaches to Pipeline Parallelism
 
@@ -161,6 +171,8 @@ One simple way to somewhat improve on this naive baseline is to **segment mini-b
 
 A direct consequence of GPipe's approach is higher peak memory required to store more activation values. This is somewhat mitigated by discarding and re-calculating activation values during the backward pass. However, re-calculation introduces a 20% increase in computation overhead <d-cite key="qi2024zero"></d-cite>. 
 
+It shall also be noted that since GPipe is a synchronous approach, some computing devices may need to be waiting for the weight to synchronize, causing nontrivial bubble ratios.
+
 
 ### PipeDream: The Representative Asynchronous Approach
 
@@ -179,52 +191,58 @@ Pipedream by Narayanan et. al. <d-cite key="narayanan2019pipedream"></d-cite> is
   Image Source: Naranyan et. al.  <d-cite key="narayanan2019pipedream"></d-cite> 
 </div>
 
-Pipedream introduced the "interleaved 1F1B" or "one forward one backward" approach, where forward and backward passes of different micro-batches are interleaved to eliminate bubbles. 
+PipeDream introduced the "interleaved 1F1B" or "one forward one backward" approach, where forward and backward passes of different micro-batches are interleaved to eliminate bubbles. However, PipeDream's approach to improving statistical efficiency increases peak memory. Weight **stashing** maintains multiple versions of weights, matching each active mini-batch, and these are used for the forward pass. They are then also **cached** for the backward pass, ensuring that within a stage, the same versions of parameters are used. Across stages, **stashed** weights are used as opposed to the latest weight update--this eliminates inconsistency across the pipeline, but does not eliminate weight staleness. (The  degree of weight staleness is formalized in <d-cite key="narayanan2019pipedream"></d-cite>).  
 
 ### PipeMare: Improved Asynchronous Approach
-In one sentence, Pipemare by Yang et. al. <d-cite key="yang2021pipemare"></d-cite> conserves memory usage by approximating weights that appeared earlier in the pipeline, instead of caching them; then to ensure convergence, it also schedules learning rate accordingly. It strikes a perfect balance between GPipe and PipeDream. 
+Pipemare by Yang et. al. <d-cite key="yang2021pipemare"></d-cite> improves the memory usage of PipeDream by approximating weights that appeared earlier in the pipeline, instead of caching them. To ensure convergence, it also schedules the learning rate accordingly. It strikes a perfect balance between GPipe and PipeDream, as it has virtually no bubble, and its memory usage is also relatively low.
 
-PipeDream uses the 1F1B mechanism to maintain a low bubble ratio, but since it computes the gradient by using the same weight in forward and backward passes, it has to store a lot of extra weight. 
-
-PipeMare, on the other hand, simply uses whatever weight $W$ in the memory to compute the gradient, and does not use the cached historical weights. 
+The idea of PipeMare is to first do whatever PipeDream does, but then *simply use whatever weight $W$ in the memory to compute the gradient during backward step*, and avoid caching stale weights like PipeDream originally does. Since no device is waiting for a specific version of weights, there is no bubble; since there's no need to store older weights, the usage of memory is efficient. Both PipeDream and GPipe's issues are resolved!
 
 Sounds intuitive, but what could go wrong?
 
-Note that at the $k$th fully connected NN layer, the computed gradient $g_k$ from backpropagation steps depends on two things: (1) the current weight stored in device $d_k$ , and (2) the loss at the model output layer, which depends on the forward pass at $k$th layer, processed by the same device $d_k$ at an earlier time, using an earlier version of model weights. In essence, it computes the gradient using two different versions of model weights! 
+Imagine training a stack of fully connected layers. Note that at the $k$th fully connected layer, computing gradient $g_k$ from backpropagation steps depends on two things: (1) some version of model weight stored in device $d_k$ , and (2) the loss at the model output layer, which depends on the forward pass at $k$th layer, processed by the same device $d_k$ at an earlier time, using an earlier version of model weights. In essence, the idea of PipeMare would result in computing the gradient using two different versions of model weights! We express this dependency as: 
 
-$$w^+ = w - \nabla f(w_{older}, w_{newer})$$
+$$w^+ = w - \nabla f(w_{\text{older}}, w_{\text{newer}})$$
 
-In comparison, gradient descent is only defined using a fixed version of function input (ie. model weights), as below:
+This phenomenon is called **Delay Discrepancy**. In comparison, gradient descent is only defined using a fixed version of function input (ie. model weights), as below:
 
 $$w^+ = w - \nabla f(w')$$
 
-where for GPipe, $w' = w$, and for PipeDream, $w'$ stands for a single version of gradient that is somewhat earlier than $w$. 
+where for GPipe, $w\' = w$, and for PipeDream, $w\'$ stands for a single version of stale model weight. 
 
-Note the trade off between GPipe and Pipedream: if we wish to update weights $w$ using only freshly computed weights, the device will sequentially wait for a certain weight $w_t$ at timestep $t$ to (1) go through forward pass; and then (2) go through back propagation path and produce an associated gradient, before computing the final update, which requires a long wait. 
+<!-- Note the trade off between GPipe and Pipedream: if we wish to update weights $w$ using only freshly computed weights, the device will sequentially wait for a certain weight $w_t$ at timestep $t$ to (1) go through forward pass; and then (2) go through back propagation path and produce an associated gradient, before computing the final update, which requires a long wait. 
 
-PipeDream, on the other hand, updates weight $w$ using some version of weight $w_t$, and while waiting for $w_t$ to make its way all the way across forward and backward pass to produce $\nabla f_t$, the device can spend the time processing other weights. The problem is, while $w_t$ makes its round trip through forward-backward prop, all newer weight copies $w_{t+1}, w_{t+2}$... shall be stored to the device, before $w_t$ finally completes the round trip, be used to update the model weights, and gets removed, which is memory intensive. 
+PipeDream, on the other hand, updates weight $w$ using some version of weight $w_t$, and while waiting for $w_t$ to make its way all the way across forward and backward pass to produce $\nabla f_t$, the device can spend the time processing other weights. The problem is, while $w_t$ makes its round trip through forward-backward prop, all newer weight copies $w_{t+1}, w_{t+2}$... shall be stored to the device, before $w_t$ finally completes the round trip, be used to update the model weights, and gets removed, which is memory intensive.  -->
+<!-- 
+Now, PipeMare simultaneously resolved both the bubble ratio issue and to some extend. Since it doesn't wait for any weights, the idling bubble is small; since it doesn't store older weights, it is memory efficient.  -->
 
-Now, Pipemare simultaneously resolved GPipe and PipeMare's issue to some extend. Since it doesn't wait for any weights, the idling bubble is small; since it doesn't store older weights, it is memory efficient. 
+This discrepancy brings two issues: 
 
-However, this brings two additional issues: 
-
-1. Since we are performing gradient descent using inconsistent versions of weights, would convergence be an issue: 
+1. Since we are performing gradient descent using inconsistent versions of weights, would convergence be an issue? 
 2. If $w^+ = w - \nabla f(w_{older}, w_{newer})$ then how do we know $w_{older}$ without caching it?  
 
-PipeMare resolves these two problems separately: 
+PipeMare's novelty involves resolving these two problems separately: 
 
-For 1, we locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then the gradient update can be seen as 
-$$w_{i+1} = w_i - \alpha \nabla f(...) = w_t - \alpha \lambda w_{t-\text{delay}} + \alpha \eta$$ 
-where $\alpha$ is the learning rate, ``delay'' is how long a particular version of gradient have delayed, and $\eta$ is the estimation of noise caused by asynchronous gradients. Then if we treat the collection of all versions of gradient over time as a single vector 
-$$W_t = [w_t, w_{t-1}, ...]^\top$$
-then the gradient update rule can be written as some linear equation: 
-$$W_{t+1} = CW_t + \alpha \eta e_1$$
-where $C$ is some suitable matrix, and $e_1$ is one-hot vector with first entry being 1. Convergence of gradient descent would hence depend on $C$'s eigenvalues, or equivalently, the roots of the characteristic polynomial 
-$p(x) = x^{\text{delay}+1} - x^{\text{delay}} + \alpha \lambda$, to lie in the unit circle; solve for an appropriate $\alpha$ gives us a learning rate that lead to convergence. Specifically, [CITE] shows that longer delays require smaller step sizes to ensure convergence. 
+For **(1)**, we may locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then the gradient update can be seen as   
 
-For 2, we once again locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then we can can approximate the gradient update equation as 
 $$w^+ = w - \nabla f(w_{older}, w_{newer}) \approx w - \lambda w_{newer} - \Delta (w_{newer} - w_{older}) + \eta $$
-where $\eta$ denotes a noise term and $\Delta$ is the sensitivity of $\nabla f$ to the discrepancy [todo] [define] of gradient. Now we mimic the strategy shown earlier, express the gradient update equation as a linear equation, and solve for appropriate parameters to make its eigenvalues stay in the unit ball. 
+
+where $\eta$ denotes a noise term and $\Delta$ is the sensitivity of $\nabla f$ to the discrepancy of gradient. Then if we treat the collection of all versions of gradient over time as a single vector:   
+
+$$W_t = [w_t, w_{t-1}, ...]^\top$$  
+
+then the gradient update rule can be written as some linear equation:   
+
+$$W_{t+1} = CW_t + \alpha \eta e_1$$  
+
+where $C$ is some suitable matrix, and $e_1$ is one-hot vector with first entry being 1. Convergence of gradient descent can then be guaranteed by solving for a learning rate $\alpha$ that lets $C$'s eigenvalues stay in the unit ball, and the weight update rule would be stable. Specifically, <d-cite key="narayanan2019pipedream"></d-cite> shows that longer delays require smaller step sizes to ensure convergence. 
+
+For **(2)**, we substitute approximation  
+
+$$w_{older} \approx w_{newer} - \Delta\text{time}(w_{older}, w_{newer}) \cdot \delta$$  
+
+into the linear equation mentioned earlier, where $\Delta\text{time}()$ denotes the difference in time-stamp, and $\delta$ is a trainable parameter that estimates how quickly model weights change over time. This allows estimating older weights using newer weights, eliminating the need of caching multiple version of stale weights, as PipeDream did.
+
 
 ### Zero-Bubble: An Improved Synchronous Approach
 
@@ -250,26 +268,10 @@ There are two version of the ZB approach: ZB-H1, which consumes the same peak me
 While ZB has a handcrafted schedule that works under the assumption that the execution times of the forward pass and each interleaved backward pass calculation are identical, an algorithm to automatically compose schedules is also introduced. The scheduling problem is formulated as integer linear programming that can be solved by an off-the-shelf ILP solver.
 
 ## Comparisons and Trade-offs
-The previous section only discussed a few of these approaches in detail. However, if we broadly examine pipeline parallelism methods and their performance metrics in memory usage, computation resource utilization, and convergence, we see some interesting trade-offs. Below is a notation key and table comparing different approaches as compiled by Guan et. al. <d-cite key="guan2024advances"></d-cite>.
+The previous section only discussed a few of these approaches in detail. However, if we broadly examine pipeline parallelism methods and their performance metrics in memory usage, computate resource utilization, and convergence, we see some interesting trade-offs. Below is a notation key and table comparing different approaches as compiled by Guan et. al. <d-cite key="guan2024advances"></d-cite>.
 
-<!-- | Approach      | Schedule   | Bubble Ratio        | Convergence | |Extra Memory | Extra Compute | Extra Communication |  
-| ------------- | ---------- | ------------------- | ----------- | |--------- | ---------- | ---------- |
-| GPipe         | Synch      | $\frac{D}{D+T}$     |  Excellent  |           |            |
-| GEMS          | Synch      |  $1 - \Theta(1/D)$  |  Excellent  | |X         |            |  X
-| DAPPLE        | Synch      |  $\frac{D}{D+T}$    |  Excellent  | |          |            |
-| Chimera       | Synch      |  $\frac{D}{D+2T}$   |  Excellent  | |X         |            | X
-| Megatron-LM   | Synch      | $\frac{D}{vT}$      |  Excellent  | |          |            | X
-| ZeroBubble*   | Synch      | $0$                 |  Excellent  |           | X          |  
-| AMPNet        | Async      | $0$                 |  Poor       |           |            |
-| PipeDream     | Async      | $0$                 |  Good       | X         |            |
-| XPipe         | Async      | $0$                 |  Good       | X         | X          |
-| SpecTrain     | Async      | $0$                 |  Good       | X         | X          |
-| PipeDream-2BW | Async      | $0$                 |  Good       | X         |            |
-| PipeMare      | Async      | $0$                 |  Good       | X         | X          |
-| AvgPipe       | Async      | $0$                 |  Good       | X         |            |  X   
-| WPipe         | Async      | $0$                 |  Good       | X         |            | -->
 
-| Notation     | Description                                   |
+| Notation     | Description                                 |
 |------------|-----------------------------------------------|
 | $D$        | Number of pipeline stages                     |
 | $P$        | Number of replicated Pipelines                |
@@ -280,22 +282,22 @@ The previous section only discussed a few of these approaches in detail. However
 | $M_a$      | Memory consumption for activations of a stage |
 | $v$        | number of chunks on each GPU                  |
 
-| Approach      | Bubble Ratio                    | Convergence | Weights Memory      | Activations Memory                    | 
-|---------------|---------------------------------|-------------|---------------------|---------------------------------------|
-| GPipe         | $(D - 1)/(T + D - 1)$           | Excellent   | $M_\theta$          | $T \times M_a$                        |           
-| GEMS          | $(D - 1)/(D+1/2)$               | Excellent   | $2M_\theta$         | $M_a$                                 |
-| DAPPLE        | $(D - 1)/(D + T - 1)$           | Excellent   | $M_\theta$          | $[M_a, D \times M_a]$                 |              
-| Chimera       | $(D - 2)/(2T + D - 2)$          | Excellent   | $2M_\theta$         | $[(D/2 + 1)M_a, D \times M_a]  $      |             
-| Megatron-LM   | $(D - 1)/(v \times T)$          | Excellent   | $M_\theta$          | $T \times M_a$                        |             
-| ZeroBubble (ZB-H2)| $\approx 0\%$               | Excellent   | $M_\theta$          | $(2D - 1) \times M_a$                 |             
-| AMPNet        | $\approx 0\%$                   | Poor        | $M_\theta$          | $[M_a, D \times M_a]$                 |             
-| PipeDream     | $\approx 0\%$                   | Good        | $M_\theta$          | $[M_a, D \times M_a]$                 |             
-| XPipe         | $\approx 0\%$                   | Good        | $M_\theta$          | $[M_a, D \times M_a]$                 |              
-| SpecTrain     | $\approx 0\%$                   | Good        | $M_\theta$          | $[M_a, D \times M_a]$                 |              
-| PipeDream-2BW | $\approx 0\%$                   | Good        | $2M_\theta$         | $[M_a, D \times M_a]$                 |             
-| PipeMare      | $\approx 0\%$                   | Good        | $M_\theta$          | $[M_a, D \times M_a]$                 |             
-| AvgPipe       | $\approx 0\%$                   | Good        | $P \times M_\theta$ | $[1, D \times T] \times P \times M_a$ |             
-| WPipe         | $\approx 0\%$                   | Good        | $2M_\theta$         | $T \times M_a$                        |             
+| Approach      | Bubble Ratio                    | Convergence | Weights Memory                   | Activations Memory                    | Extra Computation Overhead |
+|---------------|---------------------------------|-------------|----------------------------------|---------------------------------------|----------------------------|
+| GPipe         | $(D - 1)/(T + D - 1)^*$         | Excellent   | $M_\theta$                       | $T \times M_a$                        |                            |
+| GEMS          | $\approx (D - 1)/(D + 1/2)^*$   | Excellent   | $2M_\theta$                      | $M_a$                                 |                            |
+| DAPPLE        | $(D - 1)/(D + T - 1)^*$         | Excellent   | $M_\theta$                       | $[M_a, D \times M_a]$                 |                            |
+| Chimera       | $(D - 2)/(2T + D - 2)^*$        | Excellent   | $2M_\theta$                      | $[(D/2 + 1)M_a, D \times M_a]$        |                            |
+| Megatron-LM   | $(D - 1)/(v \times T)$          | Excellent   | $M_\theta$                       | $T \times M_a$                        |                            |
+| ZeroBubble (ZB-H2)| $\approx 0\%$               | Excellent   | $M_\theta$                       | $(2D - 1) \times M_a$              | X                          |
+| AMPNet        | $\approx 0\%$                   | Poor        | $M_\theta$                       | $[M_a, D \times M_a]$                 |                            |
+| PipeDream     | $\approx 0\%$                   | Good        | $[M_\theta, D \times M_\theta]$  | $[M_a, D \times M_a]$                 |                            |
+| XPipe         | $\approx 0\%$                   | Good        | $M_\theta$                       | $[M_a, D \times M_a]$                 | X                          |
+| SpecTrain     | $\approx 0\%$                   | Good        | $M_\theta$                       | $[M_a, D \times M_a]$                 | X                          |
+| PipeDream-2BW | $\approx 0\%$                   | Good        | $2M_\theta$                      | $[M_a, D \times M_a]$                 |                            |
+| PipeMare      | $\approx 0\%$                   | Good        | $M_\theta$                       | $[M_a, D \times M_a]$                 | X                          |
+| AvgPipe       | $\approx 0\%$                   | Good        | $P \times M_\theta$              | $[1, D \times T] \times P \times M_a$ |                            |
+| WPipe         | $\approx 0\%$                   | Good        | $2M_\theta$                      | $T \times M_a$                        |                            |
 
 <div class="caption"> 
   The data comprising this table is replicated from a survey by Guan et. al.  <d-cite key="guan2024advances"></d-cite>
@@ -303,5 +305,22 @@ The previous section only discussed a few of these approaches in detail. However
 
 Some of the techniques in this comparison table also require extra memory, computation, and communication overhead that do not scale directly with the included parameters. 
 
-## Conclusion and Discussion
-Ultimately, for the ideal balance of zero bubbles in the pipeline, combined with synchronous training semantics, and a schedule that is optimally calculated with integer linear programming (ILP), ZeroBubble's ZB-H2 approach would be an ideal starting point and represent the current state of the art in pipeline parallelism. However, they note that the algorithm for computing ideal schedules may not scale well with an off-the-shelf ILP solver. This could lead to new approaches to optimize the algorithm, or construct ILP solutions specifically for machine learning applications. Like other trends in machine learning, such as [custom-built accelerators](https://cloud.google.com/tpu), pipeline parallelism could benefit from optimization tools specifically customized to machine learning applications. In addition, tolerance for additional memory and computation overhead should be assessed for each learning task when choosing which approach to apply. 
+Observe that these approaches can be broadly categorized as follows:
+
+1. Synchronous approaches, like GPipe and DAPPLE, which do not use stale weights for computing gradients. 
+    - These wait for newest weights before computing gradients 
+    - Computing devices may need to stay idle, leading to nonzero bubble ratios. 
+    - Due to being synchronous, they have high statistical efficiency and therefore excellent convergence. 
+2. Asynchronous approaches that uses stale weights for gradient calculation, which allows devices to never go idle. 
+    - These effectively eliminate bubbles 
+    - Due to being asynchronous, they have relatively lower statistical efficiency, and slightly worse convergence behavior. 
+    - Asynchronous approaches can further be refined as: 
+        1. Approaches that caches stale weights to handle weight discrepancy, like PipeDream, AvgPipe, and WPipe. These approaches don't need extra computation overhead, but always uses no less than $2M_\theta$ memory for storing weights. 
+        2. Approaches that uses extra computation overhead to predict or approximate older versions' weights, like Pipemare, XPipe, and SpecTrain. These approaches only need to store one copy of model weights, so the weight memory usage is always $M_\theta$. 
+
+Two notable exceptions include AMPNet and ZeroBubble. AMPNet neither caches extra copies of stale weights nor has computation overhead, but converges poorly. ZeroBubble's ZB-H2 approach separates backpropagation calculations so they can be interleaved, and achieves zero bubbles under synchronous training semantics. 
+
+
+## Conclusion
+
+The comparison above can assist model developers in choosing which approach to apply for optimizing computation and memory efficiency that scales with the model. Ultimately, for the ideal balance of zero bubbles in the pipeline, combined with synchronous training semantics, and a schedule that is optimally calculated with integer linear programming (ILP), ZeroBubble's ZB-H2 approach would be an ideal starting point and represent the current state of the art in pipeline parallelism. However, the algorithm for computing ideal schedules may not scale well with an off-the-shelf ILP solver. This could lead to new approaches to optimize the algorithm, or construct ILP solutions specifically for machine learning applications. Like other trends in machine learning, such as [custom-built accelerators](https://cloud.google.com/tpu), pipeline parallelism could benefit from optimization tools specifically customized to machine learning applications. 
