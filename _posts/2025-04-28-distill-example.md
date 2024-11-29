@@ -290,22 +290,22 @@ The previous section only discussed a few of these approaches in detail. However
 | $M_a$      | Memory consumption for activations of a stage |
 | $v$        | number of chunks on each GPU                  |
 
-| Approach      | Bubble Ratio                    | Convergence | Weights Memory      | Activations Memory                    | 
-|---------------|---------------------------------|-------------|---------------------|---------------------------------------|
-| GPipe         | $(D - 1)/(T + D - 1)^*$         | Excellent   | $M_\theta$          | $T \times M_a$                        |              |               |                     |
-| GEMS          | $\approx (D - 1)/(D + 1/2)^*$   | Excellent   | $2M_\theta$         | $M_a$                                 |              |               |                     |
-| DAPPLE        | $(D - 1)/(D + T - 1)^*$         | Excellent   | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
-| Chimera       | $(D - 2)/(2T + D - 2)^*$        | Excellent   | $2M_\theta$         | $[(D/2 + 1)M_a, D \times M_a]^*$      |              |               |                     |
-| Megatron-LM   | $(D - 1)/(v \times T)$          | Excellent   | $M_\theta$          | $T \times M_a$                        |              |               |                     |
-| ZeroBubble (ZB-H2)| $\approx 0\%$               | Excellent   | $M_\theta$          | $(2D - 1) \times M_a^\S$              |              |               |                     |
-| AMPNet        | $\approx 0\%$                   | Poor        | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
-| PipeDream     | $\approx 0\%$                   | Good        | $[M_\theta, D \times M_\theta]$          | $[M_a, D \times M_a]$                 |              |               |                     |
-| XPipe         | $\approx 0\%$                   | Good       | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
-| SpecTrain     | $\approx 0\%$                   | Good       | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
-| PipeDream-2BW | $\approx 0\%$                   | Good        | $2M_\theta$         | $[M_a, D \times M_a]$                 |              |               |                     |
-| PipeMare      | $\approx 0\%$                   | Good        | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
-| AvgPipe       | $\approx 0\%$                   | Good        | $P \times M_\theta$ | $[1, D \times T] \times P \times M_a$ |              |               |                     |
-| WPipe         | $\approx 0\%$                   | Good        | $2M_\theta$         | $T \times M_a$                        |              |               |                     |
+| Approach      | Bubble Ratio                    | Convergence | Weights Memory                   | Activations Memory                    | Extra Computation Overhead |
+|---------------|---------------------------------|-------------|----------------------------------|---------------------------------------|----------------------------|
+| GPipe         | $(D - 1)/(T + D - 1)^*$         | Excellent   | $M_\theta$                       | $T \times M_a$                        |                            |
+| GEMS          | $\approx (D - 1)/(D + 1/2)^*$   | Excellent   | $2M_\theta$                      | $M_a$                                 |                            |
+| DAPPLE        | $(D - 1)/(D + T - 1)^*$         | Excellent   | $M_\theta$                       | $[M_a, D \times M_a]$                 |                            |
+| Chimera       | $(D - 2)/(2T + D - 2)^*$        | Excellent   | $2M_\theta$                      | $[(D/2 + 1)M_a, D \times M_a]$        |                            |
+| Megatron-LM   | $(D - 1)/(v \times T)$          | Excellent   | $M_\theta$                       | $T \times M_a$                        |                            |
+| ZeroBubble (ZB-H2)| $\approx 0\%$               | Excellent   | $M_\theta$                       | $(2D - 1) \times M_a^\S$              | X                          |
+| AMPNet        | $\approx 0\%$                   | Poor        | $M_\theta$                       | $[M_a, D \times M_a]$                 |                            |
+| PipeDream     | $\approx 0\%$                   | Good        | $[M_\theta, D \times M_\theta]$  | $[M_a, D \times M_a]$                 |                            |
+| XPipe         | $\approx 0\%$                   | Good        | $M_\theta$                       | $[M_a, D \times M_a]$                 | X                          |
+| SpecTrain     | $\approx 0\%$                   | Good        | $M_\theta$                       | $[M_a, D \times M_a]$                 | X                          |
+| PipeDream-2BW | $\approx 0\%$                   | Good        | $2M_\theta$                      | $[M_a, D \times M_a]$                 |                            |
+| PipeMare      | $\approx 0\%$                   | Good        | $M_\theta$                       | $[M_a, D \times M_a]$                 | X                          |
+| AvgPipe       | $\approx 0\%$                   | Good        | $P \times M_\theta$              | $[1, D \times T] \times P \times M_a$ |                            |
+| WPipe         | $\approx 0\%$                   | Good        | $2M_\theta$                      | $T \times M_a$                        |                            |
 
 <div class="caption"> 
   The data comprising this table is replicated from a survey by Guan et. al.  <d-cite key="guan2024advances"></d-cite>
@@ -313,8 +313,16 @@ The previous section only discussed a few of these approaches in detail. However
 
 Some of the techniques in this comparison table also require extra memory, computation, and communication overhead that do not scale directly with the included parameters. 
 
-## Conclusion and Discussion
+Observe that these approaches can be broadly categorized as follows:
 
-Observe that these approaches can be broadly grouped into 2 categories. The first includes synchronous approaches, which do not use stale weights for computing gradients; to wait for newest weights before computing gradients, the computing devices may need to stay idle, leading to nonzero bubble ratios, but due to being synchronous, they have high statistical efficiency and therefore excellent convergence; The second includes asynchronous approaches, which uses stale weight for gradient calculation, allowing devices to never go idle, and effectively reduces bubble ratio to zero, but due to being asynchronous, they have relatively lower statistical efficiency, and therefore slightly worse convergence behavior. 
+1. Synchronous approaches, like GPipe and DAPPLE, which do not use stale weights for computing gradients; to wait for newest weights before computing gradients, the computing devices may need to stay idle, leading to nonzero bubble ratios, but due to being synchronous, they have high statistical efficiency and therefore excellent convergence. 
+2. Asynchronous approaches that uses stale weights for gradient calculation, which allows devices to never go idle, and effectively eliminates bubble, but due to being asynchronous, they have relatively lower statistical efficiency, and therefore slightly worse convergence behavior. They can further be refined as: 
+   1. Approaches that caches stale weights to handle weight discrepancy, like PipeDream, AvgPipe, and WPipe; these approaches don't need extra computation overhead, but always uses no less than $2M_\theta$ memory for storing weights. 
+   2. Approaches that uses extra computation overhead to predict / approximate older versions stale weights, like Pipemare, XPipe, SpecTrain; these approaches only need to store one copy of model weights, so the weight memory usage is always $M_\theta$. 
+
+Two notable exceptions include AMPNet, which neither caches extra copies of stale weights nor has computation overhead, but converges poorly; and ZeroBubble, whose unique approach is covered in earlier sections. 
+
+
+## Conclusion and Discussion
 
 Ultimately, for the ideal balance of zero bubbles in the pipeline, combined with synchronous training semantics, and a schedule that is optimally calculated with integer linear programming (ILP), ZeroBubble's ZB-H2 approach would be an ideal starting point and represent the current state of the art in pipeline parallelism. However, they note that the algorithm for computing ideal schedules may not scale well with an off-the-shelf ILP solver. This could lead to new approaches to optimize the algorithm, or construct ILP solutions specifically for machine learning applications. Like other trends in machine learning, such as [custom-built accelerators](https://cloud.google.com/tpu), pipeline parallelism could benefit from optimization tools specifically customized to machine learning applications. In addition, tolerance for additional memory and computation overhead should be assessed for each learning task when choosing which approach to apply. 
