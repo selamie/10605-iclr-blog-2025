@@ -167,8 +167,6 @@ A direct consequence of GPipe's approach is higher peak memory required to store
 
 ### PipeDream: The Representative Asynchronous Approach
 
-<!-- PipeDream first introduced the term "pipeline parallelism" in a paper released in 2018. PipeDream systematically partitions DNN layers to keep all GPUs productive and minimize communication. It introduced the idea of pipelining minibatches in addition to partitioning layers of the model.  -->
-
 Pipedream by Narayanan et. al. <d-cite key="narayanan2019pipedream"></d-cite> is representative of the group of **asynchronous** approaches to pipeline parallelism, meaning that it occasionally must compute gradients of a mini-batch with "stale" weights, which can reduce learning efficiency (i.e., not every update has the same amount of information that it would in traditional model training)
 
 - Pipedream **communicates** only the output data of a set of model layers (partitioned according to number of GPUs)
@@ -213,10 +211,25 @@ Now, Pipemare simultaneously resolved GPipe and PipeMare's issue to some extend.
 
 However, this brings two additional issues: 
 
-1. If $w^+ = w - \nabla f(w_{older}, w_{newer})$ then how do we know $w_{older}$ without caching it?  
-2. Since we are performing gradient descent using inconsistent versions of weights, would convergence be an issue?
+1. Since we are performing gradient descent using inconsistent versions of weights, would convergence be an issue: 
+2. If $w^+ = w - \nabla f(w_{older}, w_{newer})$ then how do we know $w_{older}$ without caching it?  
 
-### Zero-Bubble: Improved Synchronous Approach
+PipeMare resolves these two problems separately: 
+
+For 1, we locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then the gradient update can be seen as 
+$$w_{i+1} = w_i - \alpha \nabla f(...) = w_t - \alpha \lambda w_{t-\text{delay}} + \alpha \eta$$ 
+where $\alpha$ is the learning rate, ``delay'' is how long a particular version of gradient have delayed, and $\eta$ is the estimation of noise caused by asynchronous gradients. Then if we treat the collection of all versions of gradient over time as a single vector 
+$$W_t = [w_t, w_{t-1}, ...]^\top$$
+then the gradient update rule can be written as some linear equation: 
+$$W_{t+1} = CW_t + \alpha \eta e_1$$
+where $C$ is some suitable matrix, and $e_1$ is one-hot vector with first entry being 1. Convergence of gradient descent would hence depend on $C$'s eigenvalues, or equivalently, the roots of the characteristic polynomial 
+$p(x) = x^{\text{delay}+1} - x^{\text{delay}} + \alpha \lambda$, to lie in the unit circle; solve for an appropriate $\alpha$ gives us a learning rate that lead to convergence. Specifically, [CITE] shows that longer delays require smaller step sizes to ensure convergence. 
+
+For 2, we once again locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then we can can approximate the gradient update equation as 
+$$w^+ = w - \nabla f(w_{older}, w_{newer}) \approx w - \lambda w_{newer} - \Delta (w_{newer} - w_{older}) + \eta $$
+where $\eta$ denotes a noise term and $\Delta$ is the sensitivity of $\nabla f$ to the discrepancy [todo] [define] of gradient. Now we mimic the strategy shown earlier, express the gradient update equation as a linear equation, and solve for appropriate parameters to make its eigenvalues stay in the unit ball. 
+
+### Zero-Bubble: An Improved Synchronous Approach
 
 The Zero-Bubble (or "ZB") synchronous approach introduced by Qi et al. <d-cite key="qi2024zero"></d-cite> achieved  zero-bubble pipeline parallelism under synchronous scheduling. This was made possible by their innovation of **splitting up the gradient computation in the backward pass**, such that this, too, could be interleaved to eliminate bubbles. The approach demonstrates that grouping the backward pass calculations together sequential is unnecessary. 
 
@@ -239,24 +252,28 @@ There are two version of the ZB approach: ZB-H1, which consumes the same peak me
 
 While ZB has a handcrafted schedule that works under the assumption that the execution times of the forward pass and each interleaved backward pass calculation are identical, an algorithm to automatically compose schedules is also introduced. The scheduling problem is formulated as integer linear programming that can be solved by an off-the-shelf ILP solver.
 
-
-
 ## Comparisons and Trade-offs
+Due to limited space, the previous section only discussed a few of these approaches in detail. However, if we broadly examine pipeline parallelism methods and their performance metrics in e.g. memory usage, computation resource utilization, and convergence, we see some interesting trade-offs: 
 
-Finally, how do these approaches compare in their memory use, compute utilization, and learning convergence? 
+[CITE]
 
-<div class="col mt-3">
-    <div class="col-sm mt-3 mt-md-0">
-        {% include figure.html path="assets/img/TableNotation.png" class="img-fluid rounded z-depth-1" %}
-    </div>
-    <div class="col-sm mt-3 mt-md-0">
-        {% include figure.html path="assets/img/comp_table_placeholder.png" class="img-fluid rounded z-depth-1" %}
-    </div>
-</div>
-<div class="caption">
-  Image Source: Guan et. al. <d-cite key="guan2024advances"></d-cite> 
-</div>
+| Approach      | Schedule   | Bubble Ratio        | Convergence | Extra Mem | Extra Comp | Extra Comm |  
+| ------------- | ---------- | ------------------- | ----------- | --------- | ---------- | ---------- |
+| GPipe         | Synch      | $\frac{D}{D+T}$     |  Excellent  |           |
+| GEMS          | Synch      |  $1 - \Theta(1/D)$  |  Excellent  | X         |
+| DAPPLE        | Synch      |  $\frac{D}{D+T}$    |  Excellent  |           |
+| Chimera       | Synch      |  $\frac{D}{D+2T}$   |  Excellent  | X         |
+| Megatron-LM   | Synch      | $\frac{D}{vT}$      |  Excellent  |           |
+| ZeroBubble    | Synch      | $0$                 |  Excellent  |           |
+| AMPNet        | Async      | $0$                 |  Poor       |           |
+| PipeDream     | Async      | $0$                 |  Good       | X         |    
+| XPipe         | Async      | $0$                 |  Good       | X         |    
+| SpecTrain     | Async      | $0$                 |  Good       | X         |    
+| PipeDream-2BW | Async      | $0$                 |  Good       | X         |    
+| PipeMare      | Async      | $0$                 |  Good       | X         |    
+| AvgPipe       | Async      | $0$                 |  Good       | X         |    
+| WPipe         | Async      | $0$                 |  Good       | X         |    
 
+A survey of these approaches (cite) showed... (add explanation)
 
-
-<!-- Compute extra memory, compute, and comms -->
+[TODO] implicit compute cost: LR schedule constraint. 
