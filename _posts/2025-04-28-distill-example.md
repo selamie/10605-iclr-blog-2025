@@ -186,10 +186,7 @@ Pipedream by Narayanan et. al. <d-cite key="narayanan2019pipedream"></d-cite> is
 
 Pipedream introduced the "interleaved 1F1B" or "one forward one backward" approach to asynchronous pipeline scheduling that reduces bubbles under asynchronous scheduling to zero. 
 
-
-
-
-### PipeMare
+### PipeMare: Improved Asynchronous Approach
 In one sentence, Pipemare by Yang et. al. <d-cite key="yang2021pipemare"></d-cite> conserves memory usage by approximating weights that appeared earlier in the pipeline, instead of caching them; then to ensure convergence, it also schedules learning rate accordingly. It strikes a perfect balance between GPipe and PipeDream. 
 
 PipeDream uses the 1F1B mechanism to maintain a low bubble ratio, but since it computes the gradient by using the same weight in forward and backward passes, it has to store a lot of extra weight. 
@@ -217,16 +214,9 @@ Now, Pipemare simultaneously resolved GPipe and PipeMare's issue to some extend.
 However, this brings two additional issues: 
 
 1. If $w^+ = w - \nabla f(w_{older}, w_{newer})$ then how do we know $w_{older}$ without caching it?  
-2. Since we are performing gradient descent using inconsistent versions of weights, would convergence be an issue: 
+2. Since we are performing gradient descent using inconsistent versions of weights, would convergence be an issue?
 
-PipeMare resolves these two problems separately: 
-
-1. TODO
-2. TODO
-
-[TODO mention GPipe's lr schedule, as well as discrepancy approx]
-
-### Zero-Bubble: An Improved Synchronous Approach
+### Zero-Bubble: Improved Synchronous Approach
 
 The Zero-Bubble (or "ZB") synchronous approach introduced by Qi et al. <d-cite key="qi2024zero"></d-cite> achieved  zero-bubble pipeline parallelism under synchronous scheduling. This was made possible by their innovation of **splitting up the gradient computation in the backward pass**, such that this, too, could be interleaved to eliminate bubbles. The approach demonstrates that grouping the backward pass calculations together sequential is unnecessary. 
 
