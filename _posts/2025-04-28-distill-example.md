@@ -126,17 +126,24 @@ If we were to create a plot representing what each of the devices are doing at a
   Image Source: Guan et. al.  <d-cite key="guan2024advances"></d-cite> 
 </div>
 
-Notice how each device (ie. GPU) is idle for most of the time? If we were to consider a very simplistic case where each task, whether it is forward or backward computation, takes exactly 1 second to complete, then each device is only working for $2$ out of the $2p$ seconds, meaning a lot of hardware is sitting around, doing nothing. This idling is indicated by the white spaces in the plot, known as "bubbles". The term "bubble ratio" is used to describe the ratio of such hardware idle time. 
+Notice how each device (ie. GPU) is idle for most of the time? If we were to consider a very simplistic case where each task, whether it is forward or backward computation, takes exactly 1 second to complete, then each device is only working for $2$ out of the $2p$ seconds, meaning a lot of hardware is sitting around, doing nothing. This idling is indicated by the white spaces in the plot, known as **bubbles**. The term **bubble ratio** is used to describe the ratio of such hardware idle time. 
+
+Evidently, having a high bubble ratio is inefficient usage of computing resources. By allocating computing tasks on GPU properly, we may make hardware usage or model training more efficient; such allocation strategies are called **Pipeline Scheduling**, which we discuss in the following section. 
 
 ### Pipeline Scheduling
 
 In general, pipeline parallelism can be divided into **synchronous** and **asynchronous** scheduling approaches. The naive approach described is a **synchronous** approach, referring to the fact that, periodically, all model parameters are synchronously updated with the accumulated gradients at a given stage. This is the most **statistically efficient** approach as each update uses all learned information. 
+As shown earlier in the example of naive pipeline parallelism, letting computing devices wait for the accumulated gradients lead to considerable device idling, and thus a high bubble ratio. 
 
-**Asynchronous** approaches do not wait to update with all accumulated gradients, allowing higher GPU utilization. But this also means that later mini-batches in the pipeline may derive gradients with stale weights, harming statistical efficiency. 
+**Asynchronous** approaches do not wait to update with all accumulated gradients, allowing higher GPU utilization and reduces bubble ratio. But this also means that later mini-batches in the pipeline may derive gradients with **stale weights**, which refers to weights that were computed in the past. This harms **statistical efficiency**, as we are updating the model weights using slightly outdated information. 
 
 Given the tradeoffs between the two schedules, any particular implementation of each uses different techniques to try to improve the bubble ratio in the synchronous case, and the learning efficiency in the asynchronous case. Each attempt to mitigate these traits can come with memory and communication trade-offs in exchange for more efficient compute utilization or statistical efficiency. 
 
-If synchronous scheduling is the most statistically efficient, why would you ever use an asynchronous schedule? Well, if the learning task were some ideal, parabolic convex optimization case, then it's possible there'd be no point to using any approach that harms the numerical progression down to some global minimum. But real machine learning problems are typically messier than this, and in most cases, rather than targeting an ideal convergence, we simply measure the model's actual performance on a problem. Essentially, **it may be advantageous to get to a less-than-ideal convergence faster with our available compute resources**, especially if "faster" is the difference between practically possible or not. 
+If synchronous scheduling is the most statistically efficient, why would you ever use an asynchronous schedule? Well, if the learning task were some ideal, parabolic convex optimization case, and moreover we have all the GPU's in the world, then it's possible there'd be no point to using any approach that harms the numerical progression down the true global minimum. But real machine learning scenarios typically have the following traits: 
+- Objective function is messier, so in most cases, we measure the model's actual performance on a problem, and accurate convergence to global min may not be the biggest concern, and 
+- We do not have all the GPU's in the world, so having some of them staying idle during model training is not economical. 
+  
+Essentially, **it may be advantageous to get to a less-than-ideal convergence faster while making better utilization of our available compute resources**, especially if "faster" is the difference between practically possible or not. 
 
 ## Practical Approaches to Pipeline Parallelism
 
@@ -220,7 +227,7 @@ $$W_t = [w_t, w_{t-1}, ...]^\top$$
 then the gradient update rule can be written as some linear equation:   
 $$W_{t+1} = CW_t + \alpha \eta e_1$$  
 where $C$ is some suitable matrix, and $e_1$ is one-hot vector with first entry being 1. Convergence of gradient descent would hence depend on $C$'s eigenvalues, or equivalently, the roots of the characteristic polynomial 
-$p(x) = x^{\text{delay}+1} - x^{\text{delay}} + \alpha \lambda$, to lie in the unit circle; solve for an appropriate $\alpha$ gives us a learning rate that lead to convergence. Specifically, [CITE] shows that longer delays require smaller step sizes to ensure convergence. 
+$p(x) = x^{\text{delay}+1} - x^{\text{delay}} + \alpha \lambda$, to lie in the unit circle; solve for an appropriate $\alpha$ gives us a learning rate that lead to convergence. Specifically, <d-cite key="narayanan2019pipedream"></d-cite> shows that longer delays require smaller step sizes to ensure convergence. 
 
 For 2, we once again locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then we can can approximate the gradient update equation as   
 $$w^+ = w - \nabla f(w_{older}, w_{newer}) \approx w - \lambda w_{newer} - \Delta (w_{newer} - w_{older}) + \eta $$  
