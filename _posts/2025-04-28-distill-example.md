@@ -92,7 +92,7 @@ In **model parallelism**, the model itself is divided into multiple partitions o
 
 <!-- cite image: https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/scaling/JAX/tensor_parallel_simple.html -->
 
-The horizontal approach, "tensor parallelism" or intra-layer parallelism, splits each tensor in the model into different chunks, and during processing results are synchronized at each step. The vertical approach, **"pipeline parallelism"** or inter-layer parallelism, segments the model into stages, like a pipeline, and only the resulting activation values and gradients need to be transmitted between GPUs. Tensor parallelism generally has higher communication overhead than pipeline parallelism because all the results of these partial tensor computations must be transmitted, and inefficient AllReduce operations performed more frequently. 
+The horizontal approach, "tensor parallelism" or intra-layer parallelism, splits each tensor in the model into different chunks, and during processing results are synchronized at each step. The vertical approach, **"pipeline parallelism"** or inter-layer parallelism, segments the model into stages, like a pipeline, and only the resulting activation values and gradients need to be transmitted between GPUs. Tensor parallelism generally has higher communication overhead than pipeline parallelism because all the results of these partial tensor computations must be transmitted. 
 
 <!-- However, [it can potentially be more memory efficient and reduce GPU idle time](https://www.determined.ai/blog/tp).  -->
 
@@ -126,7 +126,7 @@ If we were to create a plot representing what each of the devices are doing at a
   Image Source: Guan et. al.  <d-cite key="guan2024advances"></d-cite> 
 </div>
 
-Notice how each device (ie. GPU) is idle for most of the time? If we were to consider a very simplistic case where each task, whether it is forward or backward computation, takes exactly 1 second to complete, then each device is only working for $2$ out of the $2p$ seconds, meaning a lot of hardware is sitting around, doing nothing. This idling is indicated by the white spaces in the plot, and they are known as "Bubbles". The term "Bubble Ratio" is used to describe the ratio of such hardware idle time. 
+Notice how each device (ie. GPU) is idle for most of the time? If we were to consider a very simplistic case where each task, whether it is forward or backward computation, takes exactly 1 second to complete, then each device is only working for $2$ out of the $2p$ seconds, meaning a lot of hardware is sitting around, doing nothing. This idling is indicated by the white spaces in the plot, known as "bubbles". The term "bubble ratio" is used to describe the ratio of such hardware idle time. 
 
 ### Pipeline Scheduling
 
@@ -157,7 +157,7 @@ One simple way to somewhat improve on this naive baseline is to **segment mini-b
 - GPipe **communicates** only the output data of one model partition (possibly larger or smaller than a layer)
 - GPipe **synchronizes gradients** and the optimizer step across micro-batches within a mini-batch
 - The user specifies the number of micro-batches and the number of model partitions (equal to the number of available GPUs)
-- GPipe stores one version of weights total
+- GPipe **stores one version of weights total**
 
 A direct consequence of GPipe's approach is higher peak memory required to store more activation values. This is somewhat mitigated by discarding and re-calculating activation values during the backward pass. However, re-calculation introduces a 20% increase in computation overhead <d-cite key="fan2021dapple"></d-cite>. 
 
@@ -169,8 +169,8 @@ Pipedream by Narayanan et. al. <d-cite key="narayanan2019pipedream"></d-cite> is
 - Pipedream **communicates** only the output data of a set of model layers (partitioned according to number of GPUs)
 - Pipedream uses **asynchronous** computations of gradients
     - This technically reduces statistical efficiency since gradients can be computed on stale weights.
-- Pipedream continuously calculates the number of optimal minibatches at runtime.
-- Pipedream **stores one version of weights** per mini-batch
+- Pipedream continuously calculates the number of optimal mini-batches at runtime.
+- Pipedream **stores one version of weights per mini-batch**
 
 
 {% include figure.html path="assets/img/1f1b.png" class="img-fluid" %}
@@ -179,7 +179,7 @@ Pipedream by Narayanan et. al. <d-cite key="narayanan2019pipedream"></d-cite> is
   Image Source: Naranyan et. al.  <d-cite key="narayanan2019pipedream"></d-cite> 
 </div>
 
-Pipedream introduced the "interleaved 1F1B" or "one forward one backward" approach to asynchronous pipeline scheduling that reduces bubbles under asynchronous scheduling to zero. 
+Pipedream introduced the "interleaved 1F1B" or "one forward one backward" approach, where forward and backward passes of different micro-batches are interleaved to eliminate bubbles. 
 
 ### PipeMare: Improved Asynchronous Approach
 In one sentence, Pipemare by Yang et. al. <d-cite key="yang2021pipemare"></d-cite> conserves memory usage by approximating weights that appeared earlier in the pipeline, instead of caching them; then to ensure convergence, it also schedules learning rate accordingly. It strikes a perfect balance between GPipe and PipeDream. 
@@ -250,15 +250,15 @@ There are two version of the ZB approach: ZB-H1, which consumes the same peak me
 While ZB has a handcrafted schedule that works under the assumption that the execution times of the forward pass and each interleaved backward pass calculation are identical, an algorithm to automatically compose schedules is also introduced. The scheduling problem is formulated as integer linear programming that can be solved by an off-the-shelf ILP solver.
 
 ## Comparisons and Trade-offs
-The previous section only discussed a few of these approaches in detail. However, if we broadly examine pipeline parallelism methods and their performance metrics in memory usage, computation resource utilization, and convergence, we see some interesting trade-offs: 
+The previous section only discussed a few of these approaches in detail. However, if we broadly examine pipeline parallelism methods and their performance metrics in memory usage, computation resource utilization, and convergence, we see some interesting trade-offs. Below is a table and notation key comparing different approaches as compiled by Guan et. al. <d-cite key="guan2024advances"></d-cite>.
 
-| Approach      | Schedule   | Bubble Ratio        | Convergence | Extra Memory | Extra Compute | Extra Communication |  
-| ------------- | ---------- | ------------------- | ----------- | --------- | ---------- | ---------- |
+<!-- | Approach      | Schedule   | Bubble Ratio        | Convergence | |Extra Memory | Extra Compute | Extra Communication |  
+| ------------- | ---------- | ------------------- | ----------- | |--------- | ---------- | ---------- |
 | GPipe         | Synch      | $\frac{D}{D+T}$     |  Excellent  |           |            |
-| GEMS          | Synch      |  $1 - \Theta(1/D)$  |  Excellent  | X         |            |  X
-| DAPPLE        | Synch      |  $\frac{D}{D+T}$    |  Excellent  |           |            |
-| Chimera       | Synch      |  $\frac{D}{D+2T}$   |  Excellent  | X         |            | X
-| Megatron-LM   | Synch      | $\frac{D}{vT}$      |  Excellent  |           |            | X
+| GEMS          | Synch      |  $1 - \Theta(1/D)$  |  Excellent  | |X         |            |  X
+| DAPPLE        | Synch      |  $\frac{D}{D+T}$    |  Excellent  | |          |            |
+| Chimera       | Synch      |  $\frac{D}{D+2T}$   |  Excellent  | |X         |            | X
+| Megatron-LM   | Synch      | $\frac{D}{vT}$      |  Excellent  | |          |            | X
 | ZeroBubble*   | Synch      | $0$                 |  Excellent  |           | X          |  
 | AMPNet        | Async      | $0$                 |  Poor       |           |            |
 | PipeDream     | Async      | $0$                 |  Good       | X         |            |
@@ -267,11 +267,39 @@ The previous section only discussed a few of these approaches in detail. However
 | PipeDream-2BW | Async      | $0$                 |  Good       | X         |            |
 | PipeMare      | Async      | $0$                 |  Good       | X         | X          |
 | AvgPipe       | Async      | $0$                 |  Good       | X         |            |  X   
-| WPipe         | Async      | $0$                 |  Good       | X         |            |
+| WPipe         | Async      | $0$                 |  Good       | X         |            | -->
+
+| Notation     | Description                                   |
+|------------|-----------------------------------------------|
+| $D$        | Number of pipeline stages                     |
+| $P$        | Number of replicated Pipelines                |
+| $B$        | Micro-batch size                              |
+| $T$        | Number of micro-batches in each mini-batch    |
+| $N$        | Mini-batch size ($N = T \times B$)            |
+| $M_\theta$ | Memory consumption for weights of a stage     |
+| $M_a$      | Memory consumption for activations of a stage |
+| $v$        | number of chunks on each GPU                  |
+
+| Approach      | Bubble Ratio                    | Convergence | Weights Memory      | Activations Memory                    | 
+|---------------|---------------------------------|-------------|---------------------|---------------------------------------|
+| GPipe         | $(D - 1)/(T + D - 1)^*$         | Excellent   | $M_\theta$          | $T \times M_a$                        |              |               |                     |
+| GEMS          | $\approx (D - 1)/(D + 1/2)^*$   | Excellent   | $2M_\theta$         | $M_a$                                 |              |               |                     |
+| DAPPLE        | $(D - 1)/(D + T - 1)^*$         | Excellent   | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
+| Chimera       | $(D - 2)/(2T + D - 2)^*$        | Excellent   | $2M_\theta$         | $[(D/2 + 1)M_a, D \times M_a]^*$      |              |               |                     |
+| Megatron-LM   | $(D - 1)/(v \times T)$          | Excellent   | $M_\theta$          | $T \times M_a$                        |              |               |                     |
+| ZeroBubble (ZB-H2)| $\approx 0\%$               | Excellent   | $M_\theta$          | $(2D - 1) \times M_a^\S$              |              |               |                     |
+| AMPNet        | $\approx 0\%$                   | Poor        | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
+| PipeDream     | $\approx 0\%$                   | Good        | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
+| XPipe         | $\approx 0\%$                   | Good       | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
+| SpecTrain     | $\approx 0\%$                   | Good       | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
+| PipeDream-2BW | $\approx 0\%$                   | Good        | $2M_\theta$         | $[M_a, D \times M_a]$                 |              |               |                     |
+| PipeMare      | $\approx 0\%$                   | Good        | $M_\theta$          | $[M_a, D \times M_a]$                 |              |               |                     |
+| AvgPipe       | $\approx 0\%$                   | Good        | $P \times M_\theta$ | $[1, D \times T] \times P \times M_a$ |              |               |                     |
+| WPipe         | $\approx 0\%$                   | Good        | $2M_\theta$         | $T \times M_a$                        |              |               |                     |
 
 <div class="caption"> 
-  The data comprising this table is sourced from a survey by Guan et. al.  <d-cite key="guan2024advances"></d-cite>
-  * Using ZB-H2 method.  
+  The data comprising this table is replicated from a survey by Guan et. al.  <d-cite key="guan2024advances"></d-cite>
+  Notes: *
 </div>
 
 ## Conclusion and Discussion
