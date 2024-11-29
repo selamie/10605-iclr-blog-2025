@@ -299,7 +299,6 @@ The previous section only discussed a few of these approaches in detail. However
 
 <div class="caption"> 
   The data comprising this table is replicated from a survey by Guan et. al.  <d-cite key="guan2024advances"></d-cite>
-  Notes: *
 </div>
 
 ## Conclusion and Discussion
