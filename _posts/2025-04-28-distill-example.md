@@ -215,25 +215,31 @@ Now, PipeMare simultaneously resolved both the bubble ratio issue and to some ex
 
 This discrepancy brings two issues: 
 
-1. **[T1]** Since we are performing gradient descent using inconsistent versions of weights, would convergence be an issue: 
-2. **[T2]** If $w^+ = w - \nabla f(w_{older}, w_{newer})$ then how do we know $w_{older}$ without caching it?  
+1. Since we are performing gradient descent using inconsistent versions of weights, would convergence be an issue: 
+2. If $w^+ = w - \nabla f(w_{older}, w_{newer})$ then how do we know $w_{older}$ without caching it?  
 
-PipeMare's novelty resolves these two problems separately: 
+PipeMare's novelty involves resolving these two problems separately: 
 
-For **T1**, we locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then the gradient update can be seen as   
-$$w_{i+1} = w_i - \alpha \nabla f(...) = w_t - \alpha \lambda w_{t-\text{delay}} + \alpha \eta$$   
+For **(1)**, we may locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then the gradient update can be seen as   
+<!-- $$w_{i+1} = w_i - \alpha \nabla f(...) = w_t - \alpha \lambda w_{t-\text{delay}} + \alpha \eta$$   
 where $\alpha$ is the learning rate, ``delay'' is how long a particular version of gradient have delayed, and $\eta$ is the estimation of noise caused by asynchronous gradients. Then if we treat the collection of all versions of gradient over time as a single vector   
 $$W_t = [w_t, w_{t-1}, ...]^\top$$  
 then the gradient update rule can be written as some linear equation:   
 $$W_{t+1} = CW_t + \alpha \eta e_1$$  
 where $C$ is some suitable matrix, and $e_1$ is one-hot vector with first entry being 1. Convergence of gradient descent would hence depend on $C$'s eigenvalues, or equivalently, the roots of the characteristic polynomial 
-$p(x) = x^{\text{delay}+1} - x^{\text{delay}} + \alpha \lambda$, to lie in the unit circle; solve for an appropriate $\alpha$ gives us a learning rate that lead to convergence. Specifically, <d-cite key="narayanan2019pipedream"></d-cite> shows that longer delays require smaller step sizes to ensure convergence. 
+$p(x) = x^{\text{delay}+1} - x^{\text{delay}} + \alpha \lambda$, to lie in the unit circle; solve for an appropriate $\alpha$ gives us a learning rate that lead to convergence. 
 
-For **T2**, we once again locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then we can can approximate the gradient update equation as   
+For **T2**, we once again locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then we can can approximate the gradient update equation as    -->
 $$w^+ = w - \nabla f(w_{older}, w_{newer}) \approx w - \lambda w_{newer} - \Delta (w_{newer} - w_{older}) + \eta $$  
-where $\eta$ denotes a noise term and $\Delta$ is the sensitivity of $\nabla f$ to the discrepancy of gradient. Now we can mimic the strategy shown earlier, express the gradient update equation as a linear equation, solve for appropriate learning rate $\alpha$ that makes its eigenvalues stay in the unit ball, and hence the weight update rule would be stable; Finally, we substitute approximation  
+where $\eta$ denotes a noise term and $\Delta$ is the sensitivity of $\nabla f$ to the discrepancy of gradient. Then if we treat the collection of all versions of gradient over time as a single vector   
+$$W_t = [w_t, w_{t-1}, ...]^\top$$  
+then the gradient update rule can be written as some linear equation:   
+$$W_{t+1} = CW_t + \alpha \eta e_1$$  
+where $C$ is some suitable matrix, and $e_1$ is one-hot vector with first entry being 1. Convergence of gradient descent can then be guaranteed by solving for a learning rate $\alpha$ that lets $C$'s eigenvalues stay in the unit ball, and hence the weight update rule would be stable. Specifically, <d-cite key="narayanan2019pipedream"></d-cite> shows that longer delays require smaller step sizes to ensure convergence. 
+
+For **(2)**, we substitute approximation  
 $$w_{older} \approx w_{newer} - \Delta\text{time}(w_{older}, w_{newer}) \cdot \delta$$  
-into the linear equation mentioned earlier in **T2**, where $\Delta\text{time}()$ denotes the difference in time-stamp, and $\delta$ is a trainable parameter that estimates how quickly model weights change over time. This allows estimating older weights using newer weights, eliminating the need of caching multiple version of stale weights, as PipeDream did.
+into the linear equation mentioned earlier, where $\Delta\text{time}()$ denotes the difference in time-stamp, and $\delta$ is a trainable parameter that estimates how quickly model weights change over time. This allows estimating older weights using newer weights, eliminating the need of caching multiple version of stale weights, as PipeDream did.
 
 
 ### Zero-Bubble: An Improved Synchronous Approach
