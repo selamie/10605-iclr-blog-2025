@@ -213,17 +213,17 @@ However, this brings two additional issues:
 
 PipeMare resolves these two problems separately: 
 
-For 1, we locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then the gradient update can be seen as 
-$$w_{i+1} = w_i - \alpha \nabla f(...) = w_t - \alpha \lambda w_{t-\text{delay}} + \alpha \eta$$ 
-where $\alpha$ is the learning rate, ``delay'' is how long a particular version of gradient have delayed, and $\eta$ is the estimation of noise caused by asynchronous gradients. Then if we treat the collection of all versions of gradient over time as a single vector 
-$$W_t = [w_t, w_{t-1}, ...]^\top$$
-then the gradient update rule can be written as some linear equation: 
-$$W_{t+1} = CW_t + \alpha \eta e_1$$
+For 1, we locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then the gradient update can be seen as   
+$$w_{i+1} = w_i - \alpha \nabla f(...) = w_t - \alpha \lambda w_{t-\text{delay}} + \alpha \eta$$   
+where $\alpha$ is the learning rate, ``delay'' is how long a particular version of gradient have delayed, and $\eta$ is the estimation of noise caused by asynchronous gradients. Then if we treat the collection of all versions of gradient over time as a single vector   
+$$W_t = [w_t, w_{t-1}, ...]^\top$$  
+then the gradient update rule can be written as some linear equation:   
+$$W_{t+1} = CW_t + \alpha \eta e_1$$  
 where $C$ is some suitable matrix, and $e_1$ is one-hot vector with first entry being 1. Convergence of gradient descent would hence depend on $C$'s eigenvalues, or equivalently, the roots of the characteristic polynomial 
 $p(x) = x^{\text{delay}+1} - x^{\text{delay}} + \alpha \lambda$, to lie in the unit circle; solve for an appropriate $\alpha$ gives us a learning rate that lead to convergence. Specifically, [CITE] shows that longer delays require smaller step sizes to ensure convergence. 
 
-For 2, we once again locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then we can can approximate the gradient update equation as 
-$$w^+ = w - \nabla f(w_{older}, w_{newer}) \approx w - \lambda w_{newer} - \Delta (w_{newer} - w_{older}) + \eta $$
+For 2, we once again locally approximate the objective function with $f(x) \approx \frac{\lambda}{2}x^2$ for simplicity; then we can can approximate the gradient update equation as   
+$$w^+ = w - \nabla f(w_{older}, w_{newer}) \approx w - \lambda w_{newer} - \Delta (w_{newer} - w_{older}) + \eta $$  
 where $\eta$ denotes a noise term and $\Delta$ is the sensitivity of $\nabla f$ to the discrepancy [todo] [define] of gradient. Now we mimic the strategy shown earlier, express the gradient update equation as a linear equation, and solve for appropriate parameters to make its eigenvalues stay in the unit ball. 
 
 ### Zero-Bubble: An Improved Synchronous Approach
@@ -304,4 +304,7 @@ The previous section only discussed a few of these approaches in detail. However
 Some of the techniques in this comparison table also require extra memory, computation, and communication overhead that do not scale directly with the included parameters. 
 
 ## Conclusion and Discussion
+
+Observe that these approaches can be broadly grouped into 2 categories. The first includes synchronous approaches, which do not use stale weights for computing gradients; to wait for newest weights before computing gradients, the computing devices may need to stay idle, leading to nonzero bubble ratios, but due to being synchronous, they have high statistical efficiency and therefore excellent convergence; The second includes asynchronous approaches, which uses stale weight for gradient calculation, allowing devices to never go idle, and effectively reduces bubble ratio to zero, but due to being asynchronous, they have relatively lower statistical efficiency, and therefore slightly worse convergence behavior. 
+
 Ultimately, for the ideal balance of zero bubbles in the pipeline, combined with synchronous training semantics, and a schedule that is optimally calculated with integer linear programming (ILP), ZeroBubble's ZB-H2 approach would be an ideal starting point and represent the current state of the art in pipeline parallelism. However, they note that the algorithm for computing ideal schedules may not scale well with an off-the-shelf ILP solver. This could lead to new approaches to optimize the algorithm, or construct ILP solutions specifically for machine learning applications. Like other trends in machine learning, such as [custom-built accelerators](https://cloud.google.com/tpu), pipeline parallelism could benefit from optimization tools specifically customized to machine learning applications. In addition, tolerance for additional memory and computation overhead should be assessed for each learning task when choosing which approach to apply. 
